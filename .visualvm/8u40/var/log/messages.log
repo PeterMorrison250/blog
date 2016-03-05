@@ -1,0 +1,124 @@
+-------------------------------------------------------------------------------
+>Log Session: Saturday, March 5, 2016 1:33:13 PM GMT
+>System Info: 
+  Product Version         = Java VisualVM
+  Operating System        = Linux version 4.2.0-27-generic running on i386
+  Java; VM; Vendor        = 1.8.0_74; Java HotSpot(TM) Client VM 25.74-b02; Oracle Corporation
+  Runtime                 = Java(TM) SE Runtime Environment 1.8.0_74-b02
+  Java Home               = /usr/lib/jvm/java-8-oracle/jre
+  System Locale; Encoding = en_GB (visualvm); UTF-8
+  Home Directory          = /home/vp
+  Current Directory       = /home/vp
+  User Directory          = /home/vp/.visualvm/8u40
+  Cache Directory         = /home/vp/.cache/visualvm/8u40
+  Installation            = /usr/lib/jvm/java-8-oracle/lib/visualvm/visualvm
+                            /usr/lib/jvm/java-8-oracle/lib/visualvm/profiler
+                            /usr/lib/jvm/java-8-oracle/lib/visualvm/platform
+  Boot & Ext. Classpath   = /usr/lib/jvm/java-8-oracle/jre/lib/resources.jar:/usr/lib/jvm/java-8-oracle/jre/lib/rt.jar:/usr/lib/jvm/java-8-oracle/jre/lib/sunrsasign.jar:/usr/lib/jvm/java-8-oracle/jre/lib/jsse.jar:/usr/lib/jvm/java-8-oracle/jre/lib/jce.jar:/usr/lib/jvm/java-8-oracle/jre/lib/charsets.jar:/usr/lib/jvm/java-8-oracle/jre/lib/jfr.jar:/usr/lib/jvm/java-8-oracle/jre/classes:/usr/lib/jvm/java-8-oracle/jre/lib/ext/dnsns.jar:/usr/lib/jvm/java-8-oracle/jre/lib/ext/jfxrt.jar:/usr/lib/jvm/java-8-oracle/jre/lib/ext/cldrdata.jar:/usr/lib/jvm/java-8-oracle/jre/lib/ext/localedata.jar:/usr/lib/jvm/java-8-oracle/jre/lib/ext/sunjce_provider.jar:/usr/lib/jvm/java-8-oracle/jre/lib/ext/sunec.jar:/usr/lib/jvm/java-8-oracle/jre/lib/ext/jaccess.jar:/usr/lib/jvm/java-8-oracle/jre/lib/ext/zipfs.jar:/usr/lib/jvm/java-8-oracle/jre/lib/ext/sunpkcs11.jar:/usr/lib/jvm/java-8-oracle/jre/lib/ext/nashorn.jar
+  Application Classpath   = /usr/lib/jvm/java-8-oracle/lib/visualvm/platform/lib/boot.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/lib/org-openide-modules.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/lib/org-openide-util.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/lib/org-openide-util-lookup.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/lib/locale/boot_ja.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/lib/locale/boot_zh_CN.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/lib/locale/org-openide-modules_ja.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/lib/locale/org-openide-modules_zh_CN.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/lib/locale/org-openide-util_ja.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/lib/locale/org-openide-util-lookup_ja.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/lib/locale/org-openide-util-lookup_zh_CN.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/lib/locale/org-openide-util_zh_CN.jar:/usr/lib/jvm/java-8-oracle/lib/dt.jar:/usr/lib/jvm/java-8-oracle/lib/tools.jar
+  Startup Classpath       = /usr/lib/jvm/java-8-oracle/lib/visualvm/platform/core/core.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/core/org-openide-filesystems.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/core/locale/org-openide-filesystems_zh_CN.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/core/locale/core_zh_CN.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/core/locale/org-openide-filesystems_ja.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/platform/core/locale/core_ja.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/visualvm/core/com-sun-tools-visualvm-modules-startup.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/visualvm/core/locale/core_visualvm.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/visualvm/core/locale/com-sun-tools-visualvm-modules-startup_zh_CN.jar:/usr/lib/jvm/java-8-oracle/lib/visualvm/visualvm/core/locale/com-sun-tools-visualvm-modules-startup_ja.jar
+-------------------------------------------------------------------------------
+INFO [org.netbeans.core.startup.NbEvents]: Turning on modules:
+	org.openide.util.lookup [8.24.1 20140910-unknown-revn]
+	org.openide.util [8.37.1 20140910-unknown-revn]
+	org.openide.modules [7.42.1 20140910-unknown-revn]
+	org.netbeans.api.annotations.common/1 [1.23.1 20140910-unknown-revn]
+	org.openide.filesystems [8.10.1 20140910-unknown-revn]
+	org.openide.awt [7.61.2 20140910-unknown-revn]
+	org.netbeans.api.progress/1 [1.37.1 20140910-unknown-revn]
+	org.openide.dialogs [7.36.1 20140910-unknown-revn]
+	org.openide.nodes [7.38.1 20140910-unknown-revn]
+	org.openide.windows [6.70.1 20140910-unknown-revn]
+	org.netbeans.modules.editor.mimelookup/1 [1.35.1 20140910-unknown-revn]
+	org.openide.text [6.61.1 20140910-unknown-revn]
+	org.netbeans.swing.tabcontrol [1.50.1 20140910-unknown-revn]
+	org.netbeans.swing.outline [1.29.1 20140910-unknown-revn]
+	org.openide.explorer [6.56.1 20140910-unknown-revn]
+	org.openide.actions [6.34.1 20140910-unknown-revn]
+	org.netbeans.modules.queries/1 [1.38.1 20140910-unknown-revn]
+	org.openide.loaders [7.56.2 20140910-unknown-revn]
+	org.openide.io [1.44.1 20140910-unknown-revn]
+	org.netbeans.swing.plaf [1.36.1 20140910-unknown-revn]
+	org.netbeans.spi.quicksearch [1.22.1 20140910-unknown-revn]
+	org.netbeans.bootstrap/1 [2.67.1 20140910-unknown-revn]
+	org.netbeans.core.startup/1 [1.53.1 20140910-unknown-revn]
+	org.netbeans.modules.settings/1 [1.44.1 20140910-unknown-revn]
+	org.netbeans.modules.sendopts/2 [2.30.1 20140910-unknown-revn]
+	org.netbeans.modules.sampler [1.9.1 20140910-unknown-revn]
+	org.netbeans.modules.progress.ui [1.28.1 20140910-unknown-revn]
+	org.netbeans.modules.profiler.utilities/1 [1.30.1 20140910-unknown-revn]
+	org.netbeans.lib.profiler/1 [1.54.2 20140910-unknown-revn]
+	org.netbeans.lib.profiler.charts/1 [1.23.2 20140910-unknown-revn]
+	org.netbeans.lib.profiler.common/1 [1.30.2 20140910-unknown-revn]
+	org.netbeans.modules.profiler.api/1 [1.17.3 20140910-unknown-revn]
+	org.netbeans.lib.profiler.ui/1 [1.43.2 20140910-unknown-revn]
+	org.netbeans.modules.keyring [1.19.1 20140910-unknown-revn]
+	org.netbeans.core/2 [3.45.1 20140910-unknown-revn]
+	org.netbeans.modules.options.api/1 [1.39.1 20140910-unknown-revn]
+	org.netbeans.modules.profiler.selector.api/1 [1.28.1 20140910-unknown-revn]
+	org.netbeans.modules.profiler.attach/2 [2.13.2 20140910-unknown-revn]
+	org.netbeans.modules.profiler.selector.ui/1 [1.25.1 20140910-unknown-revn]
+	org.netbeans.modules.profiler/2 [2.20.2 20140910-unknown-revn]
+	org.netbeans.modules.profiler.snaptracer/1 [1.16.1 20140910-unknown-revn]
+	org.netbeans.modules.profiler.oql/2 [2.11.1 20140910-unknown-revn]
+	org.netbeans.modules.profiler.heapwalker [1.98.1 20140910-unknown-revn]
+	org.netbeans.modules.masterfs/2 [2.46.1 20140910-unknown-revn]
+	org.netbeans.modules.masterfs.nio2 [1.11.1 20140910-unknown-revn]
+	org.netbeans.modules.keyring.fallback [1.3.1 20140910-unknown-revn]
+	org.netbeans.modules.keyring.impl [1.18.1 20140910-unknown-revn]
+	org.netbeans.modules.editor.mimelookup.impl/1 [1.26.1 20140910-unknown-revn]
+	org.netbeans.modules.autoupdate.services [1.45.3 20140910-unknown-revn]
+	org.netbeans.modules.autoupdate.ui [1.40.1 20140910-unknown-revn]
+	org.netbeans.modules.autoupdate.cli [1.8.1 20140910-unknown-revn]
+	org.netbeans.core.windows/2 [2.75.2 20140910-unknown-revn]
+	org.netbeans.core.ui/1 [1.40.1 20140910-unknown-revn]
+	org.netbeans.core.multitabs/1 [1.7.2.1 1 20140910-unknown-revn]
+	com.sun.tools.visualvm.uisupport/0 [1.3 140910]
+	com.sun.tools.visualvm.core/0 [1.4 140910]
+	com.sun.tools.visualvm.host/0 [1.0 140910]
+	com.sun.tools.visualvm.application/0 [1.9 140910]
+	com.sun.tools.visualvm.tools/0 [1.4 140910]
+	com.sun.tools.visualvm.coredump/0 [1.0 140910]
+	com.sun.tools.visualvm.threaddump/0 [1.0 140910]
+	com.sun.tools.visualvm.heapdump/0 [1.1 140910]
+	com.sun.tools.visualvm.profiling/0 [1.3 140910]
+	com.sun.tools.visualvm.sampler [2.1 140910]
+	com.sun.tools.visualvm.sa/0 [1.1 140910]
+	com.sun.tools.visualvm.modules.startup [1.1 140910]
+	com.sun.tools.visualvm.profiler/0 [1.5 140910]
+	com.sun.tools.visualvm.modules.appui [1.0 140910]
+	com.sun.tools.visualvm.jvmstat/0 [1.0 140910]
+	com.sun.tools.visualvm.jvm/0 [1.1 140910]
+	com.sun.tools.visualvm.jmx/0 [1.3 140910]
+	com.sun.tools.visualvm.charts/0 [1.4 140910]
+	com.sun.tools.visualvm.host.views/0 [1.0 140910]
+	com.sun.tools.visualvm.host.remote/0 [1.0 140910]
+	com.sun.tools.visualvm.attach/0 [1.1 140910]
+	com.sun.tools.visualvm.application.views/0 [1.0 140910]
+INFO [org.netbeans.ui.metrics.laf]: USG_LOOK_AND_FEEL
+WARNING [org.openide.filesystems.Ordering]: Not all children in Windows2/Modes/explorer/ marked with the position attribute: [ExplorerTopComponent.wstcref], but some are: [profiler_cp.wstcref]
+Diagnostic information
+Input arguments:
+	-Djdk.home=/usr/lib/jvm/java-8-oracle
+	-Dnetbeans.default_userdir_root=/home/vp/.visualvm
+	-Dnetbeans.running.environment=kde
+	-Dnetbeans.dirs=/usr/lib/jvm/java-8-oracle/lib/visualvm/visualvm:/usr/lib/jvm/java-8-oracle/lib/visualvm/profiler:
+	-Dnetbeans.home=/usr/lib/jvm/java-8-oracle/lib/visualvm/platform
+	-Xms24m
+	-Xmx256m
+	-Dsun.jvmstat.perdata.syncWaitMs=10000
+	-Dsun.java2d.noddraw=true
+	-Dsun.java2d.d3d=false
+	-Dnetbeans.keyring.no.master=true
+	-Dplugin.manager.install.global=false
+	-XX:+HeapDumpOnOutOfMemoryError
+	-XX:HeapDumpPath=/home/vp/.visualvm/8u40/var/log/heapdump.hprof
+Compiler: HotSpot Client Compiler
+Heap memory usage: initial 24.0MB maximum 247.5MB
+Non heap memory usage: initial 160.0kB maximum -1b
+Garbage collector: Copy (Collections=18 Total time spent=0s)
+Garbage collector: MarkSweepCompact (Collections=1 Total time spent=0s)
+Classes: loaded=4737 total loaded=4737 unloaded 0
+INFO [org.netbeans.core.ui.warmup.DiagnosticTask]: Total memory 4,134,944,768
+INFO [null]: Total physical memory 4,134,944,768
+WARNING [org.netbeans.TopSecurityManager]: use of system property netbeans.home has been obsoleted in favor of InstalledFileLocator/Places at org.netbeans.Clusters.relativeDirsWithHome(Clusters.java:104)

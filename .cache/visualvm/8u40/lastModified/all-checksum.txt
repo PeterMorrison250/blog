@@ -1,0 +1,9 @@
+platform=1457117072000
+cluster.visualvm=1457117066000
+cluster.profiler=1457117066000
+user=1457117072000
+crc=7
+locale=en_GB
+branding=visualvm
+java.version=1.8.0_74
+java.vm.version=25.74-b02

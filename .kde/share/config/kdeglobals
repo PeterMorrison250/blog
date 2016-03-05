@@ -1,0 +1,5 @@
+[$Version]
+update_info=kded.upd:kde3.0
+
+[General]
+dbfile=/home/vp/.mozilla/firefox/l8mtg6ut.default/places.sqlite

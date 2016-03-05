@@ -1,0 +1,66 @@
+Run releasechecker:  "/usr/share/kde4/apps/muonapplicationnotifier/releasechecker" 
+checked for upgrades and return with  1 
+plasmapackage:/ui/NotificationDelegate/NotificationDelegate.qml:209:21: QML TextEdit: Possible anchor loop detected on fill.
+plasmapackage:/ui/NotificationDelegate/NotificationDelegate.qml:163:13: QML Item: Binding loop detected for property "height"
+plasmapackage:/ui/NotificationDelegate/NotificationDelegate.qml:163:13: QML Item: Binding loop detected for property "height"
+file:///usr/lib/kde4/imports/org/kde/plasma/components/TabButton.qml:111:5: QML QObject_QML_191: Binding loop detected for property "portrait"
+file:///usr/share/kde4/apps/plasma/plasmoids/org.kde.notifications/contents/ui/Notifications.qml:216:17: QML TabButton: Binding loop detected for property "implicitHeight"
+file:///usr/lib/kde4/imports/org/kde/plasma/components/TabButton.qml:111:5: QML QObject_QML_191: Binding loop detected for property "portrait"
+file:///usr/lib/kde4/imports/org/kde/plasma/components/TabButton.qml:111:5: QML QObject_QML_191: Binding loop detected for property "portrait"
+file:///usr/lib/kde4/imports/org/kde/plasma/components/TabButton.qml:111:5: QML QObject_QML_191: Binding loop detected for property "portrait"
+file:///usr/lib/kde4/imports/org/kde/plasma/components/TabBar.qml:150:5: QML Item: Possible anchor loop detected on fill.
+file:///usr/lib/kde4/imports/org/kde/plasma/components/TabBar.qml:150:5: QML Item: Possible anchor loop detected on fill.
+Bus::open: Can not get ibus-daemon's address. 
+IBusInputContext::createInputContext: no connection to ibus-daemon 
+ControllerWindow::resizeEvent QSize(-1, -1) 
+file:///usr/share/kde4/apps/plasma/packages/org.kde.desktop.widgetexplorer/contents/ui/Tooltip.qml:75:5: QML Grid: Cannot anchor to an item that isn't a parent or sibling.
+file:///usr/share/kde4/apps/plasma/packages/org.kde.desktop.widgetexplorer/contents/ui/Tooltip.qml:75:5: QML Grid: Cannot specify anchors for items inside Grid
+file:///usr/share/kde4/apps/plasma/packages/org.kde.desktop.widgetexplorer/contents/ui/main.qml:137:5: QML QDeclarativeLoader_QML_245: Binding loop detected for property "height"
+QDeclarativeExpression: Expression "(function $separator() { return modelData.separator })" depends on non-NOTIFYable properties: 
+    Plasma::WidgetAction::separator
+file:///usr/share/kde4/apps/plasma/packages/org.kde.desktop.widgetexplorer/contents/ui/main.qml:73:41: QML Component: Delegate component must be Item type.
+QDeclarativeExpression: Expression "(function $separator() { return modelData.separator })" depends on non-NOTIFYable properties: 
+    Plasma::WidgetAction::separator
+QDeclarativeExpression: Expression "(function $separator() { return modelData.separator })" depends on non-NOTIFYable properties: 
+    Plasma::WidgetAction::separator
+file:///usr/share/kde4/apps/plasma/packages/org.kde.desktop.widgetexplorer/contents/ui/main.qml:48:29248: QML Component: Delegate component must be Item type.
+file:///usr/share/kde4/apps/plasma/packages/org.kde.desktop.widgetexplorer/contents/ui/main.qml:316:17: Unable to assign undefined value
+file:///usr/share/kde4/apps/plasma/packages/org.kde.desktop.widgetexplorer/contents/ui/main.qml:71: Unable to assign QObject* to QDeclarativeItem*
+file:///usr/share/kde4/apps/plasma/packages/org.kde.desktop.widgetexplorer/contents/ui/main.qml:46: Unable to assign QObject* to QDeclarativeItem*
+ControllerWindow::resizeEvent QSize(1024, 100) 
+X Error: BadWindow (invalid Window parameter) 3
+  Major opcode: 20 (X_GetProperty)
+  Resource id:  0x1e002e0
+X Error: BadWindow (invalid Window parameter) 3
+  Major opcode: 20 (X_GetProperty)
+  Resource id:  0x1e002e0
+X Error: BadWindow (invalid Window parameter) 3
+  Major opcode: 20 (X_GetProperty)
+  Resource id:  0x1e002e0
+Object::connect: No such signal org::freedesktop::UPower::DeviceAdded(QDBusObjectPath)
+Object::connect: No such signal org::freedesktop::UPower::DeviceRemoved(QDBusObjectPath)
+Bus::open: Can not get ibus-daemon's address. 
+IBusInputContext::createInputContext: no connection to ibus-daemon 
+QPixmap::scaled: Pixmap is a null pixmap
+QPixmap::scaled: Pixmap is a null pixmap
+QPixmap::scaled: Pixmap is a null pixmap
+Object::connect: No such signal org::freedesktop::UPower::DeviceAdded(QDBusObjectPath)
+Object::connect: No such signal org::freedesktop::UPower::DeviceRemoved(QDBusObjectPath)
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 
+Vector smash protection is enabled.
+QDBusConnection: session D-Bus connection created before QCoreApplication. Application may misbehave.
+QDBusConnection: session D-Bus connection created before QCoreApplication. Application may misbehave.
+Bus::open: Can not get ibus-daemon's address. 
+IBusInputContext::createInputContext: no connection to ibus-daemon 
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 
+plasma-desktop(1850)/plasma StatusNotifierItemSource::refreshCallback: DBusMenu disabled for this application 

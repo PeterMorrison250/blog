@@ -1,0 +1,31 @@
+[Devices][/org/freedesktop/UDisks2/block_devices/sda1]
+Icon=drive-harddisk
+LastNameSeen=WINRE
+LastSeenMounted=false
+
+[Devices][/org/freedesktop/UDisks2/block_devices/sda5]
+Icon=drive-harddisk
+LastNameSeen=System
+LastSeenMounted=false
+
+[Devices][/org/freedesktop/UDisks2/block_devices/sda6]
+Icon=drive-harddisk
+LastNameSeen=HDBR_OS
+LastSeenMounted=false
+
+[Devices][/org/freedesktop/UDisks2/block_devices/sda7]
+Icon=drive-harddisk
+LastNameSeen=HDBR_DRIVER
+LastSeenMounted=false
+
+[Devices][/org/freedesktop/UDisks2/block_devices/sdb1]
+EverMounted=true
+Icon=drive-removable-media-usb-pendrive
+LastNameSeen=6.5 GiB Removable Media
+LastSeenMounted=true
+
+[Devices][/org/freedesktop/UDisks2/block_devices/sdc1]
+EverMounted=true
+Icon=drive-removable-media-usb-pendrive
+LastNameSeen=29.8 GiB Removable Media
+LastSeenMounted=true

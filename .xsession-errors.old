@@ -1,0 +1,6 @@
+Script for none started at run_im.
+Script for auto started at run_im.
+Script for default started at run_im.
+init: gpg-agent post-stop process (1301) killed by TERM signal
+init: Disconnected from notified D-Bus bus
+init: startkde main process (1375) killed by TERM signal

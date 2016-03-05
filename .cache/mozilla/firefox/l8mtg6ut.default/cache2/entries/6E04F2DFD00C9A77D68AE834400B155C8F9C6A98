@@ -1,0 +1,1724 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Heroku</title>
+    <link>http://blog.heroku.com</link>
+    <description>Heroku</description>
+    <ttl>60</ttl>
+    <item>
+      <title>Using Netflix Zuul to Proxy your Microservices</title>
+      <link>https://blog.heroku.com/archives/2016/3/2/using_netflix_zuul_to_proxy_your_microservices</link>
+      <pubDate>Wed, 02 Mar 2016 13:55:59 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/3/2/using_netflix_zuul_to_proxy_your_microservices</guid>
+      <description>&lt;p&gt;A common challenge when building &lt;a href="https://blog.heroku.com/archives/2015/1/20/why_microservices_matter"&gt;microservices&lt;/a&gt; is providing a unified interface to the consumers of your system. The fact that your services are split into small composable apps shouldn’t be visible to users or result in substantial development effort.&lt;/p&gt;
+
+&lt;p&gt;To solve this problem, Netflix (a major adopter of microservices) created and open-sourced its &lt;a href="http://techblog.netflix.com/2013/06/announcing-zuul-edge-service-in-cloud.html"&gt;Zuul proxy server&lt;/a&gt;. Zuul is an edge service that proxies requests to multiple backing services. It provides a unified “front door” to your system, which allows a browser, mobile app, or other user interface to consume services from multiple hosts without managing cross-origin resource sharing (CORS) and authentication for each one. You can integrate Zuul with other Netflix projects like Hystrix for fault tolerance and Eureka for service discovery, or use it to manage routing rules, filters, and load balancing across your system. &lt;/p&gt;
+&lt;p&gt;Thanks to Netflix and the &lt;a href="http://projects.spring.io/spring-cloud/"&gt;Spring Cloud project&lt;/a&gt;, you can deploy a Zuul server on Heroku in just a few minutes. This service requires very little code, and can be used with microservices written in any language--not just Java.&lt;/p&gt;
+
+&lt;h2&gt;Create the Zuul Server&lt;/h2&gt;
+
+&lt;p&gt;To begin, deploy the &lt;a href="https://github.com/kissaten/heroku-zuul-server-demo"&gt;Heroku Zuul server demo&lt;/a&gt; project by clicking this button:&lt;/p&gt;
+
+&lt;p&gt;&lt;a href="https://heroku.com/deploy?template=https://github.com/kissaten/heroku-zuul-server-demo"&gt;&lt;img src="https://www.herokucdn.com/deploy/button.png" alt="Deploy on Heroku"&gt;&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;When the deployment is complete, click the “View” link at the bottom of the page. When the app opens, it will display links to the services that Zuul exposes. Click a few to give them a try.&lt;/p&gt;
+
+&lt;p&gt;It will appear to you that the services are running in the app you just deployed but you are actually viewing services from another application (&lt;a href="https://httpbin.org"&gt;httpbin.org&lt;/a&gt;), which are proxied through the Zuul server.&lt;/p&gt;
+
+&lt;p&gt;The demo uses the following configuration located in the &lt;code&gt;src/main/resources/application.yml&lt;/code&gt; file of the demo project:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="yml"&gt;zuul:
+  routes:
+    get:
+      path: /get/**
+      url: http://httpbin.org/get
+    links:
+      path: /links/**
+      url: http://httpbin.org/links
+    images:
+      path: /image/**
+      url: http://httpbin.org/image
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;The configuration contains three named routes. Each route has a &lt;code&gt;path&lt;/code&gt;, which defines the URL mapping in the Zuul server, and a &lt;code&gt;url&lt;/code&gt;, which defines the URL of the remote service to proxy. There is also an entry that disables Eureka service discovery, but that has been omitted here.&lt;/p&gt;
+
+&lt;p&gt;This is the simplest and easiest way to configure the proxy, but it’s also very static and can’t adjust to changes or failures in your system. Zuul has the ability to load-balance its services and failover to an alternative service if the primary host goes down.&lt;/p&gt;
+
+&lt;h2&gt;Adding load balancing and failover&lt;/h2&gt;
+
+&lt;p&gt;The Zuul server you deployed comes pre-packaged with Ribbon, a client-side load-balancer, and Hystrix, a fault tolerance library. Both projects are part of the Netflix OSS suite, which means they integrate seamlessly with Zuul. All you need to do is enable them.&lt;/p&gt;
+
+&lt;p&gt;First, make sure you have the &lt;a href="https://toolbelt.heroku.com/"&gt;Heroku toolbelt&lt;/a&gt; installed. Then clone the app you deployed earlier by running this command (but replace “&amp;lt;app-name&amp;gt;” with the name of your Heroku app):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="term"&gt;$ heroku git:clone &amp;lt;app-name&amp;gt;
+$ cd &amp;lt;app-name&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Open the &lt;code&gt;src/main/resources/application.yml&lt;/code&gt; and replace the &lt;code&gt;zuul&lt;/code&gt; configuration with this code:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="yaml"&gt;zuul:
+  routes:
+    httpbin:
+      path: /**
+      serviceId: httpbin
+
+httpbin:
+  ribbon:
+    listOfServers: httpbin.org,eu.httpbin.org
+
+ribbon:
+  eureka:
+    enabled: false
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;This configuration tells Zuul to forward all requests to the &lt;code&gt;httpbin&lt;/code&gt; service, which is defined after the &lt;code&gt;zuul&lt;/code&gt; entry. The &lt;code&gt;httpbin&lt;/code&gt; entry defines the available servers: httpbin.org and its European couterpart, eu.httpbin.org. If the first host goes down, the proxy will failover to the second host. It also disables Eureka discovery for Ribbon because you don’t have a Eureka server.... yet.&lt;/p&gt;
+
+&lt;p&gt;Now you can run the Zuul server locally. Build the project by running this command:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="term"&gt;$ ./mvnw clean package
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Then launch the server locally by executing this command:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="term"&gt;$ heroku local web
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;After a few moments, the embedded Tomcat server will be ready to handle requests. Open a browser to &lt;code&gt;http://localhost:5000&lt;/code&gt; and you’ll see the complete httpbin.org site.&lt;/p&gt;
+
+&lt;p&gt;Manually configuring Ribbon to load balance your services is a great feature, but it’s just the beginning of what the Spring Cloud suite can do. If Zuul is connected to a Eureka server, it can automatically add fault tolerance and client-side load balancing to the services it proxies. &lt;/p&gt;
+
+&lt;h2&gt;Connecting to Eureka&lt;/h2&gt;
+
+&lt;p&gt;Eureka, another Netflix OSS project, is a service registry. It&amp;#39;s like a phone book for your microservices. Each microservice registers itself with Eureka, and then consumers of that service know how to find it. This is similar in spirit to a &lt;a href="https://github.com/Netflix/eureka/wiki/Eureka-at-a-glance#how-different-is-eureka-from-route-53"&gt;DNS service&lt;/a&gt; but with additional features such as host-side load-balancing and region-isolation. Eureka also keeps track of health, availability and other metadata about the service, which makes it an ideal component to integrate with your Zuul proxy.&lt;/p&gt;
+
+&lt;p&gt;For this example, you’ll need to deploy both a Eureka server and a Eureka client service by following our blog post on &lt;a href="https://blog.heroku.com/archives/2015/3/3/managing_your_microservices_on_heroku_with_netflix_s_eureka"&gt;Managing your Microservices on Heroku with Netflix&amp;#39;s Eureka&lt;/a&gt;. Once you have both components deployed, you can connect them to Zuul, which can discover the Eureka client service from the Eureka server and proxy requests to it.&lt;/p&gt;
+
+&lt;p&gt;From your local Zuul repository, open the &lt;code&gt;src/main/resources/application.yml&lt;/code&gt; again, and replace its contents with this code:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="yaml"&gt;zuul:
+  routes:
+    my-service:
+      path: /my-service/**
+      serviceId: my-service
+
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: ${EUREKA_URL:http://user:password@localhost:5000}/eureka/
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;The configuration defines a single service route, &lt;code&gt;my-service&lt;/code&gt;, which uses a &lt;code&gt;serviceId&lt;/code&gt; with the same name. But unlike the Ribbon configuration, you have not defined the &lt;code&gt;my-service&lt;/code&gt; details in this file. Instead, Zuul will retrieve them from the Eureka server, which is configured under the &lt;code&gt;eureka&lt;/code&gt; entry. It defines the Eureka server’s location at &lt;code&gt;$EUREKA_URL&lt;/code&gt; and falls back to a localhost address if it’s not set.&lt;/p&gt;
+
+&lt;p&gt;Now set the &lt;code&gt;$EUREKA_URL&lt;/code&gt; on your Heroku app using the URL and credentials of the Eureka server you deployed earlier by running a command like this:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="term"&gt;$ heroku config:set EUREKA_URL=”http://user:&amp;lt;password&amp;gt;@&amp;lt;your-eureka-app&amp;gt;.herokuapp.com”
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Commit your changes, and redeploy the Zuul server by running these commands:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ git add src/main/resources/application.yml
+$ git commit -m “eureka”
+$ git push heroku master
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Finally, open your Eureka client service through the Zuul proxy by running this command:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="term"&gt;$ heroku open my-service
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;From now on, Zuul can proxy each service you registry with the Eureka server simply by adding to your &lt;code&gt;application.yml&lt;/code&gt;. It will wrap the requests in Hystrix commands, to ensure failover, and load-balance with Ribbon. It can also handle many other features such as filters, file uploads, request headers and more.&lt;/p&gt;
+
+&lt;h2&gt;Further Reading&lt;/h2&gt;
+
+&lt;p&gt;For more information about Zuul, Ribbon and Hysterix, please see the following documentation from Netflix OSS:&lt;/p&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="https://github.com/Netflix/zuul/wiki"&gt;Zuul&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://github.com/Netflix/ribbon/wiki"&gt;Ribbon&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://github.com/Netflix/Hystrix/wiki"&gt;Hysterix&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;For more information on Spring and its Netflix integration, please see the &lt;a href="http://projects.spring.io/spring-cloud/docs/1.0.3/spring-cloud.html"&gt;Spring Cloud documentation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;To learn more about deploying Spring Boot applications on Heroku, see this &lt;a href="https://devcenter.heroku.com/articles/deploying-spring-boot-apps-to-heroku"&gt;article on Dev Center&lt;/a&gt;, or visit &lt;a href="https://devcenter.heroku.com/categories/java"&gt;Java on Heroku in Dev Center&lt;/a&gt;.&lt;/p&gt;
+</description>
+      <author>Joe Kutner</author>
+    </item>
+    <item>
+      <title>Migrating from the Mandrill Add-on</title>
+      <link>https://blog.heroku.com/archives/2016/3/2/migrating_from_the_mandrill_add_on</link>
+      <pubDate>Wed, 02 Mar 2016 00:25:03 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/3/2/migrating_from_the_mandrill_add_on</guid>
+      <description>&lt;p&gt;Last week MailChimp announced that they are shutting down the Mandrill Heroku Add-on,  giving users until April 27th to migrate to another solution. Many of our customers have sought guidance on how and where to migrate, so we have asked our &lt;a href="https://elements.heroku.com/addons/#email-sms"&gt;email providers&lt;/a&gt; to create guides for migrating from the Mandrill add-on to their respective services.&lt;/p&gt;
+&lt;p&gt;&lt;a href="https://elements.heroku.com/addons/mailgun"&gt;Mailgun&lt;/a&gt;: &lt;a href="http://blog.mailgun.com/migrating-to-the-heroku-mailgun-add-on/?utm_source=heroku&amp;amp;utm_medium=devcenter&amp;amp;utm_campaign=migrate"&gt;Migrating from the Heroku Mandrill Add-on to the Mailgun Add-on&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href="https://elements.heroku.com/addons/postmark"&gt;Postmark&lt;/a&gt;: &lt;a href="http://support.postmarkapp.com/article/1003-migrating-your-mandrill-heroku-add-on-to-postmark"&gt;Migrating your Mandrill Heroku Add-on to Postmark&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href="https://elements.heroku.com/addons/sendgrid"&gt;SendGrid&lt;/a&gt;: &lt;a href="https://sendgrid.com/blog/replacing-the-mandrill-heroku-add-on-with-the-sendgrid-add-on/"&gt;Replacing the Mandrill Heroku Add-on with the SendGrid Add-on&lt;/a&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;a href="https://elements.heroku.com/addons/sparkpost"&gt;SparkPost&lt;/a&gt;: &lt;a href="https://www.sparkpost.com/blog/mandrill-heroku-alternative-migrating-from-mandrill-to-sparkpost-on-heroku/#.VtSDxdNViko"&gt;Migrating from Mandrill to SparkPost on Heroku&lt;/a&gt;&lt;/p&gt;
+</description>
+      <author>Peter Cho</author>
+    </item>
+    <item>
+      <title>Introducing Add-on Controls: Standardize Add-ons for Your Team</title>
+      <link>https://blog.heroku.com/archives/2016/2/25/addon-controls</link>
+      <pubDate>Thu, 25 Feb 2016 19:34:36 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/2/25/addon-controls</guid>
+      <description>&lt;p&gt;Today we are introducing Add-on Controls for Heroku Enterprise customers. This new feature enables team leads to whitelist specific add-ons for approved use within their organization, choosing from our marketplace of over 150 add-on services. The ability to standardize the add-on technologies being used across all the apps and developers in their organization is something many customers have asked for, especially those with fast-growing teams.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='standardizing-add-ons-using-the-whitelist' href='#standardizing-add-ons-using-the-whitelist'&gt;Standardizing Add-ons Using the Whitelist&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;To get started with Add-on Controls, the first step is for the team lead, or anyone who has admin permissions, to build the Add-ons Whitelist. There is a new section on the organization’s settings page, where this whitelist can be created and then the Add-on Controls can be enabled. Don’t worry; enabling the whitelist does not break any existing add-ons, but simply prevents add-ons that are not on the whitelist from being installed going forward. &lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1456415279-Addons-Controls-Dashboard.jpg" alt="Addons-Controls-Dashboard"&gt;&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='managing-whitelist-exceptions' href='#managing-whitelist-exceptions'&gt;Managing Whitelist Exceptions&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;In the Add-on Controls section, you’ll be able to see the add-ons that are currently in use in your organization’s apps, but have not yet been whitelisted (labeled “Whitelist Exceptions.”) For each item in the list, you can click on the detail view to see which apps have installed the add-on and how long it has been in use. &lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1456415327-Addons-Controls-Exceptions.jpg" alt="Addons-Controls-Exceptions"&gt;&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='navigating-heroku-elements-with-add-ons-whitelisting' href='#navigating-heroku-elements-with-add-ons-whitelisting'&gt;Navigating Heroku Elements with Add-ons Whitelisting&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Once the feature is enabled, it is easy for team members to view and install the add-ons that are whitelisted for their organization. On the &lt;strong&gt;Elements page&lt;/strong&gt;, the new &amp;quot;Filter by Organization&amp;quot; dropdown lets you see what is available by selecting your organization. &lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1456415429-Addons-Controls-Elements.jpg" alt="Addons-Controls-Elements"&gt;&lt;/p&gt;
+
+&lt;p&gt;This view will be especially helpful when onboarding new developers to the team, as it provides a quick way for them to see which technologies are approved for use in your organization and to hit the ground running. In addition, the Add-ons Whitelist can be kept dynamically up to date as new add-ons become available and are chosen, eliminating the need for email or wiki page updates. Team leads might choose to provide an approved vendor for each category of functionality (logging, messaging, caching and so on), narrowing down the many choices currently available in each category. &lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='add-on-installation-restrictions' href='#add-on-installation-restrictions'&gt;Add-on Installation Restrictions&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Add-ons which are not whitelisted for use are marked as restricted and cannot be installed.  Note that add-ons will still be installable to personal apps that a team member owns that are not part of the organization. &lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1456415451-Addons-Controls-Restricted.jpg" alt="Addons-Controls-Restricted"&gt;&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='learn-more-about-add-on-controls' href='#learn-more-about-add-on-controls'&gt;Learn more about Add-on Controls&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;You can learn more about Add-on Controls in the &lt;a href="https://devcenter.heroku.com/articles/addon-controls"&gt;Dev Center&lt;/a&gt;. As always, we welcome any feedback you have on this new feature. Please reach out to us at &lt;a href="mailto:addons-feedback@heroku.com"&gt;addons-feedback@heroku.com&lt;/a&gt; or contact us via through support. &lt;/p&gt;
+</description>
+      <author>Nahid Samsami</author>
+    </item>
+    <item>
+      <title>Django 1.9's Improvements for Postgres</title>
+      <link>https://blog.heroku.com/archives/2016/2/24/django_1_9_s_improvements_for_postgres</link>
+      <pubDate>Wed, 24 Feb 2016 14:00:05 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/2/24/django_1_9_s_improvements_for_postgres</guid>
+      <description>&lt;p&gt;A big update to the beloved Python web framework known as Django was released recently: &lt;a href="https://www.djangoproject.com"&gt;Django 1.9&lt;/a&gt;. This release contains a long list of improvements for everything from the graphical styling of the admin to the ability to run your test suite in parallel.&lt;/p&gt;
+
+&lt;p&gt;Our favorite improvements to the framework were, of course, all about our favorite database: Postgres. Here are some of the highlights from the &lt;a href="https://docs.djangoproject.com/en/1.9/releases/1.9/"&gt;official release notes&lt;/a&gt; (highly recommended reading).&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='renamed-postgresql-backend' href='#renamed-postgresql-backend'&gt;Renamed PostgreSQL Backend&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Django&amp;#39;s fantastic built-in Postgres database backend received a nice name change. Previously known as &lt;code&gt;django.db.backends.postgresql_psycopg2&lt;/code&gt;, the backend will now be officially available as the much easier to remember &lt;code&gt;django.db.backends.postgresql&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;There is now no question that psycopg2 is the database driver to use when interacting with Postgres from Python. However, the old name will continue to work, for backwards compatibility.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='jsonfield' href='#jsonfield'&gt;JSONField&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;The release of Django 1.8 brought us built-in support for Postgres&amp;#39; useful &lt;code&gt;HSTORE&lt;/code&gt; data type, via &lt;code&gt;HStoreField&lt;/code&gt;, but the release of Django 1.9 has us even more excited. Django now ships with full support for Postgres&amp;#39; indexable &lt;code&gt;JSONB&lt;/code&gt; datatype, as &lt;code&gt;JSONField&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;Here&amp;#39;s an example of what &lt;code&gt;JSONField&lt;/code&gt; allows us to easily do within Django models:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Profile.objects.create(
+    name=&amp;#39;Arthur Dent&amp;#39;,
+    info={
+         &amp;#39;residences&amp;#39;: [
+             {&amp;#39;name&amp;#39;: &amp;#39;Earth&amp;#39;, &amp;#39;type&amp;#39;: &amp;#39;planet&amp;#39;, &amp;#39;status&amp;#39;: &amp;#39;destroyed&amp;#39;},
+             {&amp;#39;name&amp;#39;: &amp;#39;Heart of Gold&amp;#39;, &amp;#39;type&amp;#39;: &amp;#39;ship&amp;#39;}
+         ]
+    }
+)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Before, without &lt;code&gt;JSONField&lt;/code&gt;, this simple metadata would require a dedicated &lt;code&gt;residences&lt;/code&gt; table, with a &lt;code&gt;status&lt;/code&gt; column that would rarely be utilized. With &lt;code&gt;JSONB&lt;/code&gt;, you have total flexibility of the shape of your data, without over-burdening your database schema.&lt;/p&gt;
+
+&lt;p&gt;You can query the data, which can be fully indexed by Postgres, just as easily:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;&amp;gt;&amp;gt;&amp;gt; Profile.objects.filter(info__residences__contains={&amp;#39;name&amp;#39;: &amp;#39;Earth&amp;#39;})
+[&amp;lt;Profile: Arthur Dent&amp;gt;]
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;code&gt;JSONB&lt;/code&gt; is available on Postgres versions 9.4 and above, on all Heroku Postgres plans.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='database-transaction-commit-hooks' href='#database-transaction-commit-hooks'&gt;Database Transaction Commit Hooks&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Django&amp;#39;s database innards have a new hook available for executing a callable after a database transaction has been committed successfully: &lt;code&gt;on_commit()&lt;/code&gt;. The code originates from the &lt;a href="https://pypi.python.org/pypi/django-transaction-hooks"&gt;django-transaction-hooks&lt;/a&gt; project, which has been fully integrated into Django proper.&lt;/p&gt;
+
+&lt;p&gt;Here&amp;#39;s an example of using &lt;code&gt;on_commit()&lt;/code&gt; with WebHooks:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;from datetime import datetime
+
+import requests
+from django.db import connection
+
+def alert_webservice():
+    &amp;quot;&amp;quot;&amp;quot;Alerts webservice of database transaction events.&amp;quot;&amp;quot;&amp;quot;
+
+    # Prepare WebHook payload.
+    time = datetime.utcnow().isoformat()
+    data = {&amp;#39;event&amp;#39;: {&amp;#39;type&amp;#39;: &amp;#39;transaction&amp;#39;, &amp;#39;time&amp;#39;: time}}
+
+    # Sent the payload to the webservice.
+    r = requests.post(&amp;#39;https://httpbin.org/post&amp;#39;, data=data)
+       
+    # Ensure that request was successful.
+    assert r.ok
+       
+# Register alert_webservice transaction hook.
+connection.on_commit(alert_webservice)
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='deploy-django-1-9-on-heroku-today' href='#deploy-django-1-9-on-heroku-today'&gt;Deploy Django 1.9 on Heroku Today&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;As always, Django 1.9 is fully supported by Heroku Python. Click the deploy button below to instantly deploy a free instance of a Django 1.9 application to your Heroku account, ready for hacking.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href="https://heroku.com/deploy?template=https://github.com/heroku/python-getting-started"&gt;&lt;img src="https://www.herokucdn.com/deploy/button.png" alt="Deploy"&gt;&lt;/a&gt;&lt;/p&gt;
+</description>
+      <author>Kenneth Reitz</author>
+    </item>
+    <item>
+      <title>Microservices in Go using Go-kit</title>
+      <link>https://blog.heroku.com/archives/2016/2/19/microservices_in_go_using_go_kit</link>
+      <pubDate>Fri, 19 Feb 2016 14:45:26 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/2/19/microservices_in_go_using_go_kit</guid>
+      <description>&lt;p&gt;&lt;a href="https://github.com/go-kit/kit"&gt;Go-kit&lt;/a&gt; is a distributed programming toolkit for building microservices. It solves the common problems encountered while building distributed systems, so you can focus on your business logic. This article starts with a bit of background on microservices, then guidance on how to get started with Go-kit, including instructions on getting a basic service up and running on Heroku.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='a-brief-intro-to-microservices' href='#a-brief-intro-to-microservices'&gt;A Brief Intro to Microservices&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Traditionally, web applications are built using a monolithic approach where the entire application is built, designed, deployed and maintained as a single unit.  When working with a monolithic application various problems can arise over time: it’s easy for abstractions to leak across modules, tightly coupling them; different parts of the application may need more processing power than others, forcing you to scale in unpredictable ways; changes involve building and deploying a new version of the entire application; and tests can easily become convoluted and/or take an excruciatingly long time for the full suite to run.&lt;/p&gt;
+
+&lt;p&gt;A microservice based design addresses these issues. Applications designed using microservices consist of a set of several small (hence the term “micro”) services cooperating and communicating together. Separation between services is enforced by the service&amp;#39;s external API. Each individual micro service can be scaled and deployed separately from the rest.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='design-concerns-for-microservices-based-applications' href='#design-concerns-for-microservices-based-applications'&gt;Design Concerns for Microservices Based Applications&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;But where monolithic application have one source of logs, one source of metrics, one application to deploy, one API to rate limit, etc, microservice based application have multiple sources. Some of the common concerns of application design that are amplified in a microservices based application are:&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;&lt;strong&gt;Rate limiters&lt;/strong&gt; enforce upper thresholds on incoming request throughput.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Serialization&lt;/strong&gt; is the conversion of language specific data structures to a byte stream for presentation to another system. That other system is commonly a browser (json/xml/html) or a database, among others.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Logging&lt;/strong&gt; is the time-ordered, preferably structured, output from an application and its constituent components. &lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Metrics&lt;/strong&gt; are a record of the instrumented parts of your application and includes the aggregated measurements of latency, request counts, health and others.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Circuit breakers&lt;/strong&gt; prevent thundering herds thereby improving resiliency against intermittent errors.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Request tracing&lt;/strong&gt; across multiple services is an important tool for diagnosing issues and recreating the state of the system as a whole.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Service discovery&lt;/strong&gt; allows different services to find each other given known, stable names and the realities of the cloud, where individual systems come and go dynamically and when least expected.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;By using a toolkit that addresses these concerns, the implementations across your services becomes standard. This reduces surface area and enforces uniformity in design allowing developers to spend more time on business logic. &lt;a href="https://github.com/go-kit/kit"&gt;Go-kit&lt;/a&gt; is one such toolkit, comprised of a set of abstractions, encoded into different packages that provide a common set of interfaces for the developer. &lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='go-kit-101' href='#go-kit-101'&gt;Go-kit 101&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Let’s make a &lt;a href="https://github.com/heroku-examples/go-kit-ex1"&gt;basic service&lt;/a&gt; using Go-kit that keeps a running total of integers passed to it and responds with the current total. To start, we’ll add our business logic, encoded as an &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/service.go#L6-L8"&gt;interface&lt;/a&gt;, with a concrete &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/service.go#L10-L20"&gt;implementation&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href="https://godoc.org/github.com/go-kit/kit/endpoint#Endpoint"&gt;Endpoints&lt;/a&gt; in go-kit represent a single RPC and are the fundamental building blocks of clients and servers. Our service implements our &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/service.go#L6-L8"&gt;Counter interface&lt;/a&gt;, while the &lt;a href="https://godoc.org/github.com/go-kit/kit/endpoint#Endpoint"&gt;Endpoint interface&lt;/a&gt; is different. &lt;a href="https://en.wikipedia.org/wiki/Adapter_pattern"&gt;Adapters&lt;/a&gt; allow a struct that implements one interface to be used where another interface is expected, so an &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/transport.go#L28-L34"&gt;adapter&lt;/a&gt; for our service is needed so that it can be used as an endpoint.&lt;/p&gt;
+
+&lt;p&gt;Part of exposing a service is handling requests and responses. This is done via a pair of &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/transport.go#L36-L46"&gt;encoder/decoder functions&lt;/a&gt; which are then &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/main.go#L38-L39"&gt;used&lt;/a&gt; by &lt;a href="https://godoc.org/github.com/go-kit/kit/transport/http#NewServer"&gt;go-kit’s http transport&lt;/a&gt;. These methods take care of &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/transport.go#L45"&gt;encoding&lt;/a&gt; to and &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/transport.go#L38"&gt;decoding&lt;/a&gt; from JSON.&lt;/p&gt;
+
+&lt;p&gt;&lt;a href="https://en.wikipedia.org/wiki/Middleware"&gt;Middleware&lt;/a&gt; is used to wrap endpoints and add generic, per request functionality to the endpoint. This is done by defining a function that takes an Endpoint and returns a new Endpoint. We use middleware to add &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/main.go#L32"&gt;logging&lt;/a&gt;, &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/main.go#L32"&gt;metrics&lt;/a&gt; and &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/main.go#L28-L29"&gt;rate limiting&lt;/a&gt;. Rate limiting is done using &lt;a href="https://godoc.org/github.com/juju/ratelimit#Bucket"&gt;juju’s token bucket&lt;/a&gt; and &lt;a href="https://godoc.org/github.com/go-kit/kit/ratelimit#NewTokenBucketLimiter"&gt;go-kit’s rate limiting middleware&lt;/a&gt;. The service’s &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/metrics.go#L10-L17"&gt;metric middleware&lt;/a&gt; increments a per request counter (request.count), which is &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/main.go#L4"&gt;exposed&lt;/a&gt; as an &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/main.go#L31"&gt;expvar metric&lt;/a&gt;. Lastly, the &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/logging.go"&gt;logging middleware&lt;/a&gt; outputs the request path, request id, request and response data, as well as elapsed time. The logging middleware relies on some &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/logging.go#L19-L25"&gt;extractor functions&lt;/a&gt; to extract the path and request-id from the *http.Request and add them to the &lt;a href="https://blog.golang.org/context"&gt;context&lt;/a&gt; provided to the middleware and &lt;a href="https://github.com/heroku-examples/go-kit-ex1/blob/979621bf772ce25e1418096ef848219bcf475707/main.go#L40"&gt;endpoints&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Deploy the complete application by clicking on the “Heroku Button” shown in the &lt;a href="https://github.com/heroku-examples/go-kit-ex1"&gt;README&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Once deployed you can test the application via curl a few times (replace &lt;code&gt;floating-anchorage-23443&lt;/code&gt; with the name of the app you created):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="console"&gt;$ curl  -X POST -d &amp;#39;{&amp;quot;v&amp;quot;:1}&amp;#39; &amp;#39;https://floating-anchorage-23443.herokuapp.com/add&amp;#39;
+{&amp;quot;v&amp;quot;:1}
+$ curl  -X POST -d &amp;#39;{&amp;quot;v&amp;quot;:2}&amp;#39; &amp;#39;https://floating-anchorage-23443.herokuapp.com/add&amp;#39;
+{&amp;quot;v&amp;quot;:3}
+$ curl  -X POST -d &amp;#39;{&amp;quot;v&amp;quot;:3}&amp;#39; &amp;#39;https://floating-anchorage-23443.herokuapp.com/add&amp;#39;
+{&amp;quot;v&amp;quot;:6}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;If you execute those curl commands too fast, roughly more than 1 every 2 seconds, the rate limiting middleware will kick in and you’ll get a “rate limit exceeded” error like so:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="console"&gt;$ curl  -X POST -d &amp;#39;{&amp;quot;v&amp;quot;:1}&amp;#39; &amp;#39;https://floating-anchorage-23443.herokuapp.com/add&amp;#39;
+rate limit exceeded
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;You can also use curl to explore the recorded metrics:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="console"&gt;$ curl -s &amp;#39;https://floating-anchorage-23443.herokuapp.com/debug/vars&amp;#39;
+{
+…
+“request.count”: 4
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;The first curl command above produces a pair of log lines similar to these (viewable with “heroku log”):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="console"&gt;$ heroku logs
+...
+2016-02-17T05:20:43.545994+00:00 heroku[router]: at=info method=POST path=&amp;quot;/add&amp;quot; host=floating-anchorage-23443.herokuapp.com request_id=9c248150-03ac-4b24-b5a7-f7c1f0fb05ed fwd=&amp;quot;76.115.27.201&amp;quot; dyno=web.1 connect=18ms service=6ms status=200 bytes=143
+2016-02-17T05:20:43.546130+00:00 app[web.1]: path=/add request=1 result=1 err=null request_id=9c248150-03ac-4b24-b5a7-f7c1f0fb05ed elapsed=30.206µs
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;The latter of which is from the service’s logging middleware. The former is from the Heroku Router. A simplified form of request tracing can be achieved by ensuring that all logs across all services that comprise your application include the request id. Heroku encourages customers to drain logs for retention to a &lt;a href="https://elements.heroku.com/addons#logging"&gt;logging add-on&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;This article covered a very basic app, designed to expose you to Go-kit and its patterns. Build more complex applications, deployed to &lt;a href="https://www.heroku.com/private-spaces"&gt;Heroku Private Spaces&lt;/a&gt;, leveraging advanced Go-kit’s features such as: &lt;a href="https://godoc.org/github.com/go-kit/kit/circuitbreaker"&gt;circuit breakers&lt;/a&gt; for limiting your exposure to problems with downstream dependencies such as external APIs; &lt;a href="https://godoc.org/github.com/go-kit/kit/loadbalancer"&gt;load balancers&lt;/a&gt; for resolving service endpoints in static and dynamic environments; and Dapper style &lt;a href="https://godoc.org/github.com/go-kit/kit/tracing/zipkin"&gt;request tracing&lt;/a&gt; using Zipkin.&lt;/p&gt;
+</description>
+      <author>Edward Muller (Heroku)</author>
+    </item>
+    <item>
+      <title>Building a P2P Marketplace on Heroku: An Interview with Vitali Margolin</title>
+      <link>https://blog.heroku.com/archives/2016/2/16/building-roomer-travel-p2p-marketplace</link>
+      <pubDate>Tue, 16 Feb 2016 22:20:01 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/2/16/building-roomer-travel-p2p-marketplace</guid>
+      <description>&lt;p&gt;&lt;em&gt;Based in Tel Aviv, Israel, &lt;a href="https://il.linkedin.com/in/vitalim"&gt;Vitali Margolin&lt;/a&gt; is the Head of R&amp;amp;D for Roomer. Vitali leads a team of seven developers who built and operate the travel marketplace &lt;a href="http://www.roomertravel.com"&gt;www.roomertravel.com&lt;/a&gt; and the travel protection service &lt;a href="http://www.life-happens.com"&gt;www.life-happens.com&lt;/a&gt;, both running on Heroku.&lt;/em&gt;&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='what-are-you-running-on-heroku' href='#what-are-you-running-on-heroku'&gt;What are you running on Heroku?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;The four big projects are: the Roomer website, our administration app, our partner network and B2B website, and the Roomer API. The Roomer API is our highest load app. It can get up to 10k requests per minute from partner integrations such as Kayak. We have a few more technical products, including an app that does text recognition and automatically decodes confirmation emails, as well as a smart pricing system and a search algorithm.&lt;/p&gt;
+
+&lt;p&gt;About 90% of everything runs on Heroku. We have ten “pipelines” which represent ten projects. In every pipeline we have staging, production, and a few sandboxes, so I’m guessing we have about 50 apps total on Heroku.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='tell-us-about-your-stack' href='#tell-us-about-your-stack'&gt;Tell us about your stack&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Roomer is basically all Ruby on Rails. We have some models built in C++, which are integrated inside Ruby, and which we compile automatically when they get pushed to production.&lt;/p&gt;
+
+&lt;p&gt;On the front end we use a bit of CoffeeScript, and the Backbone.js framework. We use SCSS for our CSS rendering.&lt;/p&gt;
+
+&lt;p&gt;Our database is MySQL stored directly on Amazon. We use Amazon Redshift for our data warehouse because we process a lot of data, especially from our API. After we reached something like 10 billion rows in MySQL, we got to the point that it just couldn’t handle the speed we wanted, so we moved to Redshift. We use Amazon SQS for queuing services.&lt;/p&gt;
+
+&lt;p&gt;We use a lot of Heroku add-ons, including &lt;a href="https://elements.heroku.com/addons/memcachedcloud"&gt;Memcached Cloud&lt;/a&gt; and &lt;a href="https://elements.heroku.com/addons/rediscloud"&gt;Redis Cloud&lt;/a&gt; for caching, &lt;a href="https://elements.heroku.com/addons/newrelic"&gt;New Relic APM&lt;/a&gt; for performance monitoring, &lt;a href="https://elements.heroku.com/addons/logentries"&gt;Logentries&lt;/a&gt; for all our logs, &lt;a href="https://elements.heroku.com/addons/librato"&gt;Librato&lt;/a&gt; for real-time monitoring, and also &lt;a href="https://elements.heroku.com/addons/gemfury"&gt;Gemfury&lt;/a&gt;.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='how-does-your-team-ship-new-features' href='#how-does-your-team-ship-new-features'&gt;How does your team ship new features?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;We take a continuous integration and continuous deployment approach using Heroku’s GitHub integration and CircleCI’s GitHub integration. We follow the GitHub approach of two branches – the master and the branch you’re working on. So every developer can push to master and push to production, and whenever you actually merge something it will go into CircleCI, run the tests, and automatically deploy. Everyone is notified and the developer updates what he output to production. So we upload between zero and twelve versions every day—but not before weekends!&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='you-mentioned-pipelines-earlier-how-does-that-fit-into-your-cd-workflow' href='#you-mentioned-pipelines-earlier-how-does-that-fit-into-your-cd-workflow'&gt;You mentioned Pipelines earlier, how does that fit into your CD workflow?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;We’ve tried your &lt;a href="https://devcenter.heroku.com/articles/pipelines"&gt;Heroku Pipelines&lt;/a&gt; system and we like it because it’s so comfortable. Every developer doesn’t have to have his own environment.&lt;/p&gt;
+
+&lt;p&gt;Review Apps let us spin up an environment for every branch automatically whenever a developer does a pull request. When the developer finishes, he can merge it and QA can promote it to their environment. QA can then check it and promote it to production. It lets us bypass the “who’s using staging #3?” type of conversation during the work day. It takes time to create more environments, and Pipelines just gives you that automatically.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='have-you-experimented-with-microservices' href='#have-you-experimented-with-microservices'&gt;Have you experimented with microservices?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;We’re currently migrating some of our logic to microservices using SQS.  Although a true microservice is two different projects talking through a queue or the network, we do have specific gems for different models. They may be hard coded on Heroku, but they’re in a separate gem, so it’s pretty modular.&lt;/p&gt;
+
+&lt;p&gt;Another example is our hotel-matching algorithm. We built this to resolve any discrepancies, such as in hotel name or street name spellings, street vs. avenue, geographic locations, etc. It can check all the variations and pinpoint the correct hotel. This is done as a microservice, which is basically a separate app talking through SQS.&lt;/p&gt;
+
+&lt;p&gt;We’re also migrating our booking engine to a different microservice.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='how-do-you-find-out-about-new-heroku-features' href='#how-do-you-find-out-about-new-heroku-features'&gt;How do you find out about new Heroku features?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;I go to &lt;a href="https://devcenter.heroku.com/categories/labs"&gt;Heroku Labs&lt;/a&gt; once in awhile to check on new features. I also get Ruby Weekly and Heroku newsletters. We are very early adopters in our soul, so we usually check out the new stuff as soon as it’s available.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='' href='#'&gt;&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;&lt;em&gt;Founded in 2011, Roomer Travel connects travelers who are stuck with a nonrefundable hotel room with those looking for last minute, discounted accommodation. Read our &lt;a href="http://www.heroku.com/customers/roomer"&gt;Roomer Travel Customer Story&lt;/a&gt; to learn more about Roomer’s business.&lt;/em&gt;&lt;/p&gt;
+</description>
+      <author>Matthew Creager</author>
+    </item>
+    <item>
+      <title>Heroku Pipelines Emerges from Beta</title>
+      <link>https://blog.heroku.com/archives/2016/2/11/heroku-pipelines-GA</link>
+      <pubDate>Thu, 11 Feb 2016 16:22:32 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/2/11/heroku-pipelines-GA</guid>
+      <description>&lt;p&gt;Today is a big day for Heroku Pipelines — our continuous delivery feature that provides a visual sequence of app environments in which to test, stage, and deliver code through to production. Pipelines is now released for General Availability (GA).  &lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1455164430-image01.png" alt="A simple, three-stage Heroku Pipeline."&gt;&lt;/p&gt;
+
+&lt;p&gt;Heroku Pipelines provides teams of all sizes a new way to visualize and manage the development of applications, features, and fixes from dev and test, to staging, to production (and supports even more stages if that&amp;#39;s your team&amp;#39;s thing).  Each Pipeline stage contains the Heroku apps, resources, and add-ons necessary to test your applications before &amp;quot;promoting&amp;quot; it to the next stage.  &lt;/p&gt;
+
+&lt;p&gt;The Pipelines GitHub integrations include automatic or manual deployment of branches, and a new way to test GitHub pull requests in disposable Heroku &amp;quot;review apps&amp;quot; &lt;em&gt;before&lt;/em&gt; you merge the code -- with workflow support for the CI you already use with GitHub.&lt;/p&gt;
+
+&lt;blockquote&gt;
+&lt;p&gt;“Heroku Pipelines works seamlessly with GitHub to bring the code in your pull requests to life, providing a streamlined continuous delivery workflow,” said Tim Clem, Product Manager, GitHub. “Pipelines integrates with the GitHub API to deliver a fantastic developer workflow.”&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;The real headline here is a big thank you to our thousands of weekly Heroku Pipelines beta users, and the scores of companies that have already made Heroku Pipelines the principal tool they use every day to support Continuous Delivery.  It’s through the input of this large community that we have been able to create the Heroku Pipelines available to you in today’s GA release.  To all of you: HUGE thanks from the Heroku Developer Experience Team, and shared congratulations on Pipelines!&lt;/p&gt;
+
+&lt;p&gt;Our goal has been to bring simplicity and flexibility to continuous delivery, while allowing developers to continue to use the dev tools and CI they know and love.  &lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='getting-started-with-pipelines' href='#getting-started-with-pipelines'&gt;Getting Started with Pipelines&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;In the past, continuous delivery has been a complex ad-hoc affair for many teams and companies -- often relying on home-grown integrations, and incomplete solutions.  Heroku Pipelines creates a simple, complete, prescriptive, and visual delivery workflow that developers and other team members can use to understand the state of fixes, as well as evaluate and approve code in-process with a single click. (Attention design, product management, and external stakeholders: This single click is for you.)&lt;/p&gt;
+
+&lt;p&gt;Building a Pipeline is a one-step straightforward process available the the main dashboard, or via the Heroku Toolbelt (CLI).  The Pipelines overview page presents the development and deployment workflow in real-time, and provide full control of integrations and settings in-context.  You can see the team&amp;#39;s review apps come and go (and click to test them), code merging, applications graduating from test, and going into production -- as well as quick access to build logs and status information on all of the above.  Here at Heroku, we use the page on a large flat-screen as a real-time continuous delivery wallboard.&lt;/p&gt;
+
+&lt;p&gt;Promotions of tested code from one stage to the next are near-instantaneous as the compiled code or “slug” is promoted to the next stage&amp;#39;s environment, often eliminating the need to do a new build.  Facilities exist to match app add-ons and databases to the production or parent configuration, while protecting personally identifiable information (PII) from entering staging environments and review apps.  You&amp;#39;ll get faster iteration cycles with fewer flaws in production, and each stage&amp;#39;s environment matches the next -- including your review apps -- as &lt;a href="http://12factor.net/"&gt;exactly&lt;/a&gt; as you would like.&lt;/p&gt;
+
+&lt;p&gt;And Pipelines fully supports &lt;a href="https://devcenter.heroku.com/articles/private-spaces"&gt;Heroku Private Spaces&lt;/a&gt; as a production destination, a development environment, or both.  (Enterprise Pro Tip: you can create Pipelines with a number of production Private Spaces for isolation, compliance, and multi-geography, while enjoying the economy and flexibility of the Heroku Common Runtime for review apps, Development, and Staging environments)&lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1455164495-image02.png" alt="Review apps, used to test pull requests, in a Heroku Pipeline."&gt;&lt;/p&gt;
+
+&lt;p&gt;Pipelines tight integration with GitHub, GitHub pull requests, and &lt;a href="https://devcenter.heroku.com/articles/github-integration-review-apps"&gt;Heroku Review apps&lt;/a&gt; supports &lt;a href="https://www.heroku.com/continuous-delivery"&gt;Heroku Flow&lt;/a&gt;, our recommended methodology for continuous delivery using Heroku.  We’ve worked hard with our colleagues at GitHub to make the integration seamless and productive, whether you spend your screen-time in GitHub, or in Heroku.  You can trigger Heroku builds, as well as create, test, and share Heroku review apps from either environment.&lt;/p&gt;
+
+&lt;p&gt;A &lt;a href="https://devcenter.heroku.com/articles/pipelines-using-the-platform-api"&gt;public API for Heroku Pipelines&lt;/a&gt; is also now available.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='what-to-expect-next' href='#what-to-expect-next'&gt;What to Expect Next&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Coming out of beta doesn’t mean we are going to slow down on innovating in Pipelines, and with continuous delivery.  Of course, Pipelines supports all official Heroku buildpack languages, and is in use by developers using many third-party buildpacks.  In the coming months expect to see innovations in post-build scripting (useful for Rails and static apps developers), new management options for review apps, even better support for enterprise use cases, and more.  &lt;/p&gt;
+
+&lt;p&gt;And, of course, we&amp;#39;d love to &lt;a href="mailto:pipelines-requests@heroku.com"&gt;hear from you&lt;/a&gt; about what you&amp;#39;d like to see in Heroku Pipelines. &lt;/p&gt;
+
+&lt;p&gt;Above all — for those who haven&amp;#39;t yet — check out &lt;a href="https://devcenter.heroku.com/articles/pipelines"&gt;the docs&lt;/a&gt; and create your first pipeline!�&lt;/p&gt;
+</description>
+      <author>Ike DeLorenzo</author>
+    </item>
+    <item>
+      <title>Running Parse on Heroku</title>
+      <link>https://blog.heroku.com/archives/2016/2/4/running-parse-on-heroku</link>
+      <pubDate>Thu, 04 Feb 2016 22:00:37 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/2/4/running-parse-on-heroku</guid>
+      <description>&lt;p&gt;Three months ago we &lt;a href="https://blog.heroku.com/archives/2015/10/22/heroku-plus-parse"&gt;announced&lt;/a&gt; that Parse would be opening their Cloud Code product so that their customers would be able to deploy their mobile backends to Heroku. This allowed Parse customers to use a full Node.js environment with Cloud Code. With Parse’s recent &lt;a href="http://blog.parse.com/announcements/introducing-parse-server-and-the-database-migration-tool"&gt;announcement&lt;/a&gt;, we’re taking that one step further, by allowing you to deploy your own Parse API server to Heroku.&lt;/p&gt;
+
+&lt;p&gt;What this means for developers is that you will now be able to run all of your Parse services on Heroku, taking advantage of Heroku’s scalable platform as well as Heroku features like &lt;a href="https://blog.heroku.com/archives/2015/9/3/heroku_flow_pipelines_review_apps_and_github_sync"&gt;Pipelines, Review Apps, and GitHub Sync&lt;/a&gt;. Beyond that, because the Parse Server is now open source, you will also be able to extend and expand the Parse core functionality with no limitations.&lt;/p&gt;
+&lt;p&gt;You can get started with this today. Parse has published the Parse Server repository on &lt;a href="https://github.com/ParsePlatform/parse-server"&gt;GitHub&lt;/a&gt;, where you can begin issuing pull requests. Check out the &lt;a href="https://github.com/ParsePlatform/parse-server-example"&gt;Parse Server Example&lt;/a&gt;, where we have added a Heroku Button. With just one click, you can have a Parse Server running on a free dyno and free MongoLab database (for anything beyond experimentation, we recommend using at least a Hobby dyno). For more information about deploying a Parse Server to Heroku, see our Dev Center &lt;a href="https://devcenter.heroku.com/articles/deploying-a-parse-server-to-heroku"&gt;article&lt;/a&gt;.&lt;/p&gt;
+</description>
+      <author>Peter Cho</author>
+    </item>
+    <item>
+      <title>How Lean Poker Teaches Continuous Deployment on Heroku: An Interview with Creator Rafael Ördög</title>
+      <link>https://blog.heroku.com/archives/2016/2/2/how_lean_poker_teaches_continuous_deployment_on_heroku</link>
+      <pubDate>Tue, 02 Feb 2016 18:30:29 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/2/2/how_lean_poker_teaches_continuous_deployment_on_heroku</guid>
+      <description>&lt;p&gt;&lt;em&gt;In 2013, &lt;a href="https://twitter.com/devillsroom"&gt;Rafael Ördög&lt;/a&gt; put poker and code together, the result:  &lt;a href="http://leanpoker.org/"&gt;Lean Poker&lt;/a&gt;, a competitive coding event that teaches continuous deployment and lean startup methodologies. Rafael is based in Budapest, Hungary.&lt;/em&gt;&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='what-39-s-lean-poker' href='#what-39-s-lean-poker'&gt;What&amp;#39;s Lean Poker?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Lean Poker is a coding workshop that is designed to teach people how to practice continuous deployment and lean startup methodologies. Companies can sponsor a free public event or hold an internal, team-building event for their own employees.&lt;/p&gt;
+&lt;p&gt;The basic starting code is really simple and teams can use the language of their choice. The challenge is not to understand an existing code base but to modify it—to build a new app. Teams must iterate their app quickly in order to compete against the others. &lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='how-do-teams-compete' href='#how-do-teams-compete'&gt;How do teams compete?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;In a regular poker robot competition, you’d have a few hours or days to create your robot, and then they’re ready to start playing. With Lean Poker, it’s the other way around. The robots already exist and start playing against each other right away. The robots are not very intelligent and they just fold every time. It’s all about which team can deliver value faster than the others. This forces teams to deploy very differently in order to get ahead of the others as quickly as possible. It’s a lot harder to get ahead later in the game when the robots are smarter.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='does-lean-poker-have-an-39-origin-story-39' href='#does-lean-poker-have-an-39-origin-story-39'&gt;Does Lean Poker have an &amp;#39;origin story&amp;#39;?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;In 2010 I went to my first code retreat. I really enjoyed the day-long practice. At the same time I started playing poker with my friends. A couple of years later my company Emarsys started doing continuous deployment. As I saw my colleagues struggling, the idea just clicked. Combining poker competitions with coding was a perfect opportunity to learn continuous deployment. I spent four months building Lean Poker before the first event in January 2014 and I’ve been iterating on it ever since.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='let-s-talk-about-how-you-developed-the-lean-poker-app' href='#let-s-talk-about-how-you-developed-the-lean-poker-app'&gt;Let’s talk about how you developed the Lean Poker app&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;At work, I was asked to be a team lead for a new Ruby team and had to learn Ruby in two weeks. The best way to learn a new language is to build something in it, so I decided to use Ruby for Lean Poker.&lt;/p&gt;
+
+&lt;p&gt;The backend is built in Ruby using the Sinatra framework, and the front-end administration panel is two thousand lines of JavaScript mess!  Basically I’d already had the backend running and had only two nights to build the frontend before my first event, so I had to hack together something otherwise we wouldn’t have had a UI. Maybe some day I’ll clean it up, but for now two thousand lines of legacy is still perfectly maintainable for me, so it wouldn’t pay off yet to spend time on that. Especially because I only make minor changes to the UI.&lt;/p&gt;
+
+&lt;p&gt;I’m the kind of developer who doesn’t like it when a framework eats up my application. My main objection against Rails is that it makes you inherit from classes that you don’t want to inherit from. So I try to use plain old objects as much as possible, and the framework is just useful for wiring it up with the web server. That is why I chose Sinatra. It works better for me. If I were to start the app now, I would probably use Grape, which is even better for building single page apps with a pure API backend.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='tell-us-about-your-architecture' href='#tell-us-about-your-architecture'&gt;Tell us about your architecture&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;The entire system is designed using a microservices architecture. Lean Poker itself is composed of five microservices, each of them running on Heroku. Each team represents an additional microservice. So for example, if an event has five teams, then I’d run ten Heroku apps in parallel.&lt;/p&gt;
+
+&lt;p&gt;The microservices communicate via a very simple HTTP interface, using a REST API (although it’s not perfectly REST. I’ve never seen an API that is entirely RESTful, but it’s as close as it can be to a REST API.) Everything is running with HTTP but I do use &lt;a href="https://sidekiq.org"&gt;Sidekiq&lt;/a&gt; for message queuing because the Lean Poker system is built in Ruby. I also use Mongo for my database, Heroku Add-ons &lt;a href="https://elements.heroku.com/addons/zerigo_dns"&gt;Zerigo DNS&lt;/a&gt; for domain management, &lt;a href="https://elements.heroku.com/addons/logentries"&gt;Logentries&lt;/a&gt; for log management, and &lt;a href="https://elements.heroku.com/addons/rediscloud"&gt;Redis Cloud&lt;/a&gt; to run Sidekiq.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='what-do-the-core-microservices-do' href='#what-do-the-core-microservices-do'&gt;What do the core microservices do?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;I have one microservice (called “Manfred” after a character in the movie Croupier), which is a very simple service with a single API endpoint.  I use it to post a JSON structure that specifies the teams and their addresses on Heroku, and it initiates a “sit-and-go” tournament. Then it sends back the actual game log so you can step through the game and see every move. It basically organizes players and the game, like a croupier.&lt;/p&gt;
+
+&lt;p&gt;Another microservice (called “Hermes” after the Greek God of transitions) is basically a Heroku deployment application. Whenever it’s informed by GitHub that there’s a push, it just takes the tarball and uses the platform API to deploy the application.&lt;/p&gt;
+
+&lt;p&gt;“Lumber” is a logger microservice that subscribes to the Heroku log drain, loads up the logs, and stores them in memory. Although I can use Logentries to monitor the main app, for the players I needed more flexibility than Logentries and Papertrail could provide. Each player needed an individual account, so we wrote a basic logger, which displays log lines in HTML and stores them in memory for a few minutes. Lean Poker gives players a number of controls including the ability to add a custom log drain using the Heroku platform API.&lt;/p&gt;
+
+&lt;p&gt;Then there’s a ranking microservice (called “Rainman” after the movie with the same title). I extracted a separate service from Manfred, which the players can call. If a player sends it their cards, the service will tell them what kind of hand it is and rate how good it is.&lt;/p&gt;
+
+&lt;p&gt;Finally, there’s the live app itself that wires together the other microservices—basically the front-end stuff that communicates with the database and users. It’s the hub of the entire system.&lt;/p&gt;
+
+&lt;p&gt;And then of course, there’s the Lean Poker marketing website, which isn’t really an app but more like a static website.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='do-you-authenticate-requests-between-services' href='#do-you-authenticate-requests-between-services'&gt;Do you authenticate requests between services?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;There is some authentication for the riskier requests. The system sends out tokens and only accepts responses with those tokens, using a shared secret and decrypting the token locally on each microservice. I do have plans to migrate to the &lt;a href="https://escherauth.io/"&gt;Escher&lt;/a&gt; Auth library. It’s a much more secure solution, and it was designed for communication between Heroku microservices specifically.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='what-is-your-deployment-workflow' href='#what-is-your-deployment-workflow'&gt;What is your deployment workflow?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;When a team pushes code to GitHub, Lean Poker automatically deploys to Heroku using the platform API. When I built the app, Heroku’s GitHub integration wasn’t available yet. I use the URL to the tarball on GitHub, take it from the GitHub API and push it to the Heroku platform API.&lt;/p&gt;
+
+&lt;p&gt;When someone registers a team, the system automatically creates their own repository in GitHub. It pushes the scaffolding to their GitHub repo and from there they can immediately deploy a first version of the application.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='how-did-you-end-up-on-heroku' href='#how-did-you-end-up-on-heroku'&gt;How did you end up on Heroku?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;First I tried running Lean Poker on Rackspace, using Docker to contain the players. But I always had this fear that someone would hack the system and hijack the underlying server for bitcoin mining or misuse it in some other way. I’m a developer, not a sysadmin, and I didn’t want to care about that stuff.&lt;/p&gt;
+
+&lt;p&gt;At my company, we started to use Heroku, and I thought, “That’s amazing!” I decided to give Heroku a shot. At first, I kept the Lean Poker app on Rackspace and only moved the players to Heroku, but I eventually moved the entire system to Heroku. I had to change a few things, primarily using MongoFS to move files to Mongo, but the migration only took me a few days.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='how-many-events-have-you-run-so-far' href='#how-many-events-have-you-run-so-far'&gt;How many events have you run so far?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;So far there have been 21 Lean Poker events across Europe and I’m looking to expand to the U.S. I lead most of the events myself but I also train other coaches to run their own events.&lt;/p&gt;
+
+&lt;p&gt;If you&amp;#39;re interested in attending (or running) a Lean Poker event, visit: &lt;a href="http://www.leanpoker.org"&gt;www.leanpoker.org&lt;/a&gt; or visit our &lt;a href="http://www.heroku.com/customers/leanpoker"&gt;Lean Poker Customer Story&lt;/a&gt;.&lt;/p&gt;
+</description>
+      <author>Matthew Creager</author>
+    </item>
+    <item>
+      <title>Heroku Private Spaces Now Generally Available </title>
+      <link>https://blog.heroku.com/archives/2016/1/26/heroku_private_spaces_are_now_generally_available_within_heroku_enterprise</link>
+      <pubDate>Tue, 26 Jan 2016 12:59:07 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/1/26/heroku_private_spaces_are_now_generally_available_within_heroku_enterprise</guid>
+      <description>&lt;p&gt;Today Heroku is announcing that &lt;a href="https://www.heroku.com/private-spaces"&gt;Heroku Private Spaces&lt;/a&gt; is generally available.  Introduced in beta in September, Private Spaces is a new Heroku runtime designed from the ground up to meet the trust and control requirements of the most demanding applications. This new architecture enables Private Spaces to deliver the best of both worlds: the easy and powerful Heroku developer experience, combined with the network and trust controls historically only available in on-premise, behind-the-firewall deployments. Made available as part of Heroku Enterprise, Private Spaces makes cloud-based PaaS ready for the most critical enterprise applications.&lt;/p&gt;
+&lt;p&gt;Heroku Spaces are designed to fit in seamlessly with the rest of the Heroku experience. A Private Space contains all the familiar elements of a Heroku application, including dynos and add-ons. All the tools for creating and managing applications, such as GitHub integration, Heroku Button, and Metrics, are the same for apps running on traditional Heroku (the “&lt;a href="https://devcenter.heroku.com/articles/dyno-runtime"&gt;Common Runtime&lt;/a&gt;”) and in Private Spaces. Most importantly, creating a Private Space&amp;mdash;a private PaaS, dedicated to your organization and its applications&amp;mdash;takes just a single click and a couple of minutes; something that can otherwise take even the best organizations many months.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='private-spaces' href='#private-spaces'&gt;Private Spaces&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Complementing the existing Heroku runtime, Private Spaces is an entirely new architecture that provides important new capabilities while retaining full compatibility with existing Heroku apps.  &lt;/p&gt;
+
+&lt;p&gt;Specific benefits new with Private Spaces include:&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Dedicated, private runtime:&lt;/strong&gt; Each Private Space has a complete dyno runtime dedicated exclusively to the applications running in the space. This ensures the strongest level of isolation for applications, networking and infrastructure resources, in turn enabling production apps to meet stringent security and trust requirements. With Spaces, the developer experience hasn’t changed: deployment, scaling and monitoring are performed in exactly the same way using Heroku Toolbelt or Dashboard.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1453764969-ps-diagram.png" alt="Private Spaces diagram"&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Global region availability:&lt;/strong&gt; Since Private Spaces are discrete, self contained Heroku runtimes, they can be deployed with new kinds of flexibility&amp;mdash;including new geographic options. As of GA, Spaces can be deployed in Tokyo, Frankfurt, Oregon and Virginia, offering lower latencies for users and developers in those areas. &lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1453764878-ps-regions.png" alt="Private Spaces regions"&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Network controls:&lt;/strong&gt;  One of the more powerful new features of Private Spaces is the control it provides over the networking layer, and the ability to restrict inbound access and outbound traffic origination for the applications that run inside it.  Using network controls, Heroku applications can now be bound to other applications, VPNs, or even behind the firewall deployments.  With the Trusted IP feature, IP ranges that can access your applications can easily be specified.  And with Outbound IP management, all the traffic from applications in a Space automatically routes from a set of stable, persistent IP addresses.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1453764903-ps-settings.png" alt="Private Spaces settings"&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Private Data Services:&lt;/strong&gt; One of the most critical aspects of any app is how it processes and stores sensitive business data. Private Spaces allow data services to be created and managed inside the secure boundary of a Space ensuring that all traffic between dynos and databases flow over the private network. Use the same simple &lt;code&gt;heroku addons:create&lt;/code&gt; command to create fully managed Heroku Postgres and Heroku Redis data stores that run inside the Private Space.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='using-private-spaces' href='#using-private-spaces'&gt;Using Private Spaces&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Private Spaces appear inside of the Dashboard under a new Spaces tab, which is shown whenever a Heroku Enterprise organization is selected.  From this tab, Spaces can be created with a single click, and Spaces settings (such as Trusted IP ranges) can be configured.  Spaces can also be managed via the Heroku CLI; for instructions and full list of commands, see the &lt;a href="https://devcenter.heroku.com/articles/private-spaces"&gt;Private Spaces documentation&lt;/a&gt;. &lt;/p&gt;
+
+&lt;iframe src="https://player.vimeo.com/video/137899839?color=5e52ab&amp;title=0&amp;byline=0&amp;portrait=0" width="100%" height="475" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen&gt;&lt;/iframe&gt;
+
+&lt;p&gt;Private Spaces and their components, including Private Dynos and Private data services, are metered and billed like other Heroku components.  Specific utilization and cost information is displayed within the Dashboard of a Heroku Enterprise organization.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='customer-experience-with-private-spaces' href='#customer-experience-with-private-spaces'&gt;Customer Experience with Private Spaces&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;We’d like to thank the beta program participants, whose feedback and guidance was essential to creating Private Spaces.  With Spaces, KLM Royal Dutch Airlines is looking ahead to providing better user experiences for its global travelers, Moneytree is able to transform personal finance for Japanese users with a new multi-device consumer finance app that runs closer to their users, and Mozilla is excited at the potential for private data services to expand the kinds of information they can store on Heroku. &lt;/p&gt;
+
+&lt;p&gt;&amp;quot;We already love Heroku Private Spaces.  It builds on the power and flexibility of the service by giving us a higher level of security that our users expect when handling sensitive data,&amp;quot; said Jon Buckley, Mozilla Foundation Operations.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='private-spaces-heroku-enterprise-and-app-cloud' href='#private-spaces-heroku-enterprise-and-app-cloud'&gt;Private Spaces, Heroku Enterprise and App Cloud&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Introduced last year, App Cloud is salesforce.com’s family of platform and application development technologies.  As part of App Cloud, Heroku Enterprise is built out of the box to connect and integrate with the App Cloud services offered by Force.com; Heroku Connect lets applications automatically share data between Force.com and Heroku Postgres, SSO for Heroku lets them share developer and administrative identity, and now Private Spaces let them connect at the network level and create a security perimeter around all of the App Cloud services.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='learn-more' href='#learn-more'&gt;Learn More&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Private Spaces are now automatically available to Heroku Enterprise customers.  If you’d like more information on Private Spaces and Heroku Enterprise, or are an existing customer with questions on Spaces use and configuration, please &lt;a href="https://www.heroku.com/private-spaces#contact"&gt;contact us&lt;/a&gt;. You can learn more about Private Spaces by attending our &lt;a href="https://developer.salesforce.com/events/webinars/Heroku_Private_Spaces"&gt;technical deep dive&lt;/a&gt; on February 25th.&lt;/p&gt;
+</description>
+      <author>Tim Lang</author>
+    </item>
+    <item>
+      <title>SSO for Heroku Now Generally Available</title>
+      <link>https://blog.heroku.com/archives/2016/1/26/SSO-for-Heroku-Enterprise</link>
+      <pubDate>Tue, 26 Jan 2016 12:52:27 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/1/26/SSO-for-Heroku-Enterprise</guid>
+      <description>&lt;p&gt;Today we’re pleased to announce that SSO for Heroku is generally available for Heroku Enterprise customers.  &lt;/p&gt;
+
+&lt;p&gt;SSO for Heroku supports single sign-on for SAML 2.0 compliant identity providers (IdPs), making it easier for Heroku Enterprise customers to manage identity across various systems.  It also simplifies set-up for system administrators, allowing them to focus on managing authentication.  &lt;/p&gt;
+
+&lt;p&gt;Both cloud and on-premise identity providers are supported by SSO for Heroku.  As of today, a number of popular commercial IdPs ship with built-in support for SSO for Heroku, including Salesforce Identity, Okta, PingOne and PingFederate.  SSO for Heroku is also fully compatible with identity services from Microsoft Active Directory.  &lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1453776979-enterprise-sso.png" alt="Salesforce SSO for Heroku Set up"&gt;&lt;/p&gt;
+
+&lt;p&gt;For more detailed information, &lt;a href="https://blog.heroku.com/archives/2015/12/17/SSO-for-Heroku"&gt;see our previous post&lt;/a&gt;, and our Heroku Dev Center docs for IdP &lt;a href="https://devcenter.heroku.com/articles/using-sso-services-with-heroku"&gt;administrators&lt;/a&gt;, or their &lt;a href="https://devcenter.heroku.com/articles/using-single-sign-on-sso-services-with-heroku-for-end-users"&gt;end-users&lt;/a&gt;.  IdP vendors interested in integrating with SSO for Heroku are invited to &lt;a href="https://devcenter.heroku.com/articles/sso-for-heroku#partner-information"&gt;contact us&lt;/a&gt;.  Finally, we welcome &lt;a href="mailto:partner-info@heroku.com"&gt;any feedback&lt;/a&gt; from end users on additional IdPs you’d like to see supported.  &lt;/p&gt;
+</description>
+      <author>Kathy Simpson</author>
+    </item>
+    <item>
+      <title>Upgrading to Rails 5 Beta - The Hard Way</title>
+      <link>https://blog.heroku.com/archives/2016/1/22/rails-5-beta-upgrade</link>
+      <pubDate>Fri, 22 Jan 2016 18:25:26 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/1/22/rails-5-beta-upgrade</guid>
+      <description>&lt;p&gt;Rails 5 has been brewing for more than a year. To take advantage of new features, and stay on the supported path, you&amp;#39;ll need to upgrade. In this post, we&amp;#39;ll look at the upgrade process for a production Rails app, &lt;a href="http://www.codetriage.com"&gt;codetriage.com&lt;/a&gt;. The codebase is open source so you &lt;a href="https://github.com/codetriage/codetriage/pull/435"&gt;can follow along&lt;/a&gt;. Special thanks to &lt;a href="https://twitter.com/_cha1tanya"&gt;Prathamesh&lt;/a&gt; for his help with this blog post.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='how-stable-is-the-beta' href='#how-stable-is-the-beta'&gt;How Stable is the Beta?&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;In Rails a beta means the API is not yet stable, and features will come and go. A Release Candidate (RC) means no new features; the API is considered stable, and RCs will continue to be released until all reported regressions are resolved.&lt;/p&gt;
+
+&lt;p&gt;Should you run your production app on the beta? There is value in getting a beta working on a branch and being ready when the RC or upcoming release is available. Lots of companies run Beta and RC releases of Rails in production, but it&amp;#39;s not for the faint of heart. You&amp;#39;ll need to be pretty confident in your app, make sure your test suite is up to par, and that manual quality control (QC) checks are thorough. It&amp;#39;s always a relief to find and fix bugs before they arrive in production. Please report regressions and bugs you encounter -- the faster we uncover and report them, the faster these bugs get fixed, and the more stable Rails becomes. Remember, no one else is going to find and report the regressions in your codebase unless you do it.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='upgrade-your-gemfile' href='#upgrade-your-gemfile'&gt;Upgrade your Gemfile&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Step zero of the process is changing your Rails dependency, after which you&amp;#39;ll want to &lt;code&gt;$ bundle install&lt;/code&gt;, see what is incompatible and update those dependencies.&lt;/p&gt;
+
+&lt;p&gt;If you want to run on Heroku, I recommend avoiding the beta1 release on rubygems.org. It doesn&amp;#39;t include a &lt;a href="https://github.com/rails/rails/pull/22933"&gt;fix to stdout logging&lt;/a&gt; that is available in master. CodeTriage is running with this SHA of Rails from master:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="ruby"&gt;# Gemfile
+gem &amp;quot;rails&amp;quot;, github: &amp;quot;rails/rails&amp;quot;, ref: &amp;quot;dbf67b3a6f549769c5f581b70bc0c0d880d5d5d1&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;You&amp;#39;ll need to make sure that you&amp;#39;re running a current Ruby; Rails now requires Ruby 2.2.2 or greater. At the time of writing, I recommend 2.2.4 or 2.3.0. CodeTriage is running 2.3.0.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="ruby"&gt;# Gemfile
+ruby &amp;quot;2.3.0&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;If you can&amp;#39;t bundle, you&amp;#39;ll need to modify your dependencies in your Gemfile, or &lt;code&gt;bundle update &amp;lt;dependency&amp;gt;&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;Once you&amp;#39;ve completed a &lt;code&gt;$ bundle install&lt;/code&gt; you&amp;#39;re well on your way to getting the upgrade started.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='gems-gems-gems' href='#gems-gems-gems'&gt;Gems Gems Gems&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Just because a gem installs correctly doesn&amp;#39;t mean it&amp;#39;s compatible with Rails 5. Most libraries that specify Rails as a runtime dependency do not specify an upper bounds in their gemspec (like a Gemfile for gems). If they said &amp;quot;this gem is valid for rails versions 3-4&amp;quot; then bundler would let you know that it couldn&amp;#39;t install that gem. Unfortunately since most say something like &amp;quot;this is good for Rails version 3 to infinity,&amp;quot; there&amp;#39;s no way by versioning alone. You&amp;#39;ll have to investigate which of your dependencies are compatible manually; don&amp;#39;t worry, there are some easy ways to tell.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='rails-console' href='#rails-console'&gt;Rails Console&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;The first thing you&amp;#39;ll want to do is boot a console:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="sh"&gt;$ rails console
+Loading development environment (Rails 5.0.0.beta1)
+irb(main):001:0&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Did that work? Great, skip to the next step. If not, use backtraces to see where errors came from, and which gems might be having problems.&lt;/p&gt;
+
+&lt;p&gt;When you get a problem with a gem, check &lt;a href="https://rubygems.org"&gt;https://rubygems.org&lt;/a&gt; and see if you&amp;#39;re using the latest. If not, it&amp;#39;s a good idea to try using the most recently released version. If you still get an error, try pointing at their master branch, some libraries have fixes for Rails 5 that haven&amp;#39;t been released yet. Many libraries that depend on Rack have not released a version that supports Rack 2, however many of them have support for it in master or in another branch. When in doubt ask a gem maintainer.&lt;/p&gt;
+
+&lt;p&gt;Here&amp;#39;s an example of an error that CodeTriage saw:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="sh"&gt;$ rails console
+/Users/richardschneeman/.gem/ruby/2.3.0/gems/devise-3.5.3/lib/devise/failure_app.rb:9:in `&amp;lt;class:FailureApp&amp;gt;&amp;#39;: uninitialized constant ActionController::RackDelegation (NameError)
+  from /Users/richardschneeman/.gem/ruby/2.3.0/gems/devise-3.5.3/lib/devise/failure_app.rb:8:in `&amp;lt;module:Devise&amp;gt;&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/gems/devise-3.5.3/lib/devise/failure_app.rb:3:in `&amp;lt;top (required)&amp;gt;&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/gems/devise-3.5.3/lib/devise/mapping.rb:122:in `default_failure_app&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/gems/devise-3.5.3/lib/devise/mapping.rb:67:in `initialize&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/gems/devise-3.5.3/lib/devise.rb:325:in `new&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/gems/devise-3.5.3/lib/devise.rb:325:in `add_mapping&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/gems/devise-3.5.3/lib/devise/rails/routes.rb:238:in `block in devise_for&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/gems/devise-3.5.3/lib/devise/rails/routes.rb:237:in `each&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/gems/devise-3.5.3/lib/devise/rails/routes.rb:237:in `devise_for&amp;#39;
+  from /Users/richardschneeman/Documents/projects/codetriage/config/routes.rb:9:in `block in &amp;lt;top (required)&amp;gt;&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/actionpack/lib/action_dispatch/routing/route_set.rb:389:in `instance_exec&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/actionpack/lib/action_dispatch/routing/route_set.rb:389:in `eval_block&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/actionpack/lib/action_dispatch/routing/route_set.rb:371:in `draw&amp;#39;
+  from /Users/richardschneeman/Documents/projects/codetriage/config/routes.rb:3:in `&amp;lt;top (required)&amp;gt;&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/application/routes_reloader.rb:40:in `block in load_paths&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/application/routes_reloader.rb:40:in `each&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/application/routes_reloader.rb:40:in `load_paths&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/application/routes_reloader.rb:16:in `reload!&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/application/routes_reloader.rb:26:in `block in updater&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/activesupport/lib/active_support/file_update_checker.rb:75:in `execute&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/application/routes_reloader.rb:27:in `updater&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/application/routes_reloader.rb:7:in `execute_if_updated&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/application/finisher.rb:69:in `block in &amp;lt;module:Finisher&amp;gt;&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/initializable.rb:30:in `instance_exec&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/initializable.rb:30:in `run&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/initializable.rb:55:in `block in run_initializers&amp;#39;
+  from /Users/richardschneeman/.rubies/ruby-2.3.0/lib/ruby/2.3.0/tsort.rb:228:in `block in tsort_each&amp;#39;
+  from /Users/richardschneeman/.rubies/ruby-2.3.0/lib/ruby/2.3.0/tsort.rb:350:in `block (2 levels) in each_strongly_connected_component&amp;#39;
+  from /Users/richardschneeman/.rubies/ruby-2.3.0/lib/ruby/2.3.0/tsort.rb:431:in `each_strongly_connected_component_from&amp;#39;
+  from /Users/richardschneeman/.rubies/ruby-2.3.0/lib/ruby/2.3.0/tsort.rb:349:in `block in each_strongly_connected_component&amp;#39;
+  from /Users/richardschneeman/.rubies/ruby-2.3.0/lib/ruby/2.3.0/tsort.rb:347:in `each&amp;#39;
+  from /Users/richardschneeman/.rubies/ruby-2.3.0/lib/ruby/2.3.0/tsort.rb:347:in `call&amp;#39;
+  from /Users/richardschneeman/.rubies/ruby-2.3.0/lib/ruby/2.3.0/tsort.rb:347:in `each_strongly_connected_component&amp;#39;
+  from /Users/richardschneeman/.rubies/ruby-2.3.0/lib/ruby/2.3.0/tsort.rb:226:in `tsort_each&amp;#39;
+  from /Users/richardschneeman/.rubies/ruby-2.3.0/lib/ruby/2.3.0/tsort.rb:205:in `tsort_each&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/initializable.rb:54:in `run_initializers&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/application.rb:350:in `initialize!&amp;#39;
+  from /Users/richardschneeman/Documents/projects/codetriage/config/environment.rb:5:in `&amp;lt;top (required)&amp;gt;&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/application.rb:326:in `require_environment!&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/commands/commands_tasks.rb:157:in `require_application_and_environment!&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/commands/commands_tasks.rb:77:in `console&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/commands/commands_tasks.rb:49:in `run_command!&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/command.rb:20:in `run&amp;#39;
+  from /Users/richardschneeman/.gem/ruby/2.3.0/bundler/gems/rails-dbf67b3a6f54/railties/lib/rails/commands.rb:19:in `&amp;lt;top (required)&amp;gt;&amp;#39;
+  from bin/rails:4:in `require&amp;#39;
+  from bin/rails:4:in `&amp;lt;main&amp;gt;&amp;#39;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;The gem in the backtrace above is devise 3.5.3; we were able to get things working by pointing to master, which may be released by now.&lt;/p&gt;
+
+&lt;p&gt;Repeat this until your &lt;code&gt;rails console&lt;/code&gt; works. If you&amp;#39;re already on the master version of a gem and it&amp;#39;s still failing to boot, it might not support Rails 5 yet. Try debugging a little, and see if there&amp;#39;s any open issues about Rails 5 on the tracker. If you don&amp;#39;t see anything, open a new issue giving your error message and description of what&amp;#39;s going on, and try to be as instructive as possible. Before you do this, you might want to try using the master version of their gem in a bare-bones &lt;code&gt;rails new&lt;/code&gt; app to see if you can reproduce the problem. If the problem doesn&amp;#39;t reproduce it may be an issue with how you&amp;#39;re using the gem instead of the gem itself. This will help you uncover differences there. If you do reproduce the problem, then push it up to Github and share it in the issue. The maintainer will be able to fix an easily reproducible example much faster.&lt;/p&gt;
+
+&lt;p&gt;When you&amp;#39;re not able to upgrade around a fix, sometimes you might not need that gem, or you might want to remove it temporarily so you can work on upgrading the rest of your app while the maintainer works on a fix.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='shim-gems' href='#shim-gems'&gt;Shim Gems&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Sometimes functionality is taken out of Rails but provided via smaller gems. For example. While upgrading we had to use &lt;code&gt;record_tag_helper&lt;/code&gt; and &lt;code&gt;rails-controller-testing&lt;/code&gt; to get the app working.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='rails-server' href='#rails-server'&gt;Rails Server&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Once you&amp;#39;ve got your console working, try your server. Just like with console, get it to boot. Once it&amp;#39;s booted try hitting the main page and some other actions. You&amp;#39;ll be looking for exceptions as well as strange behavior, though not all bugs cause exceptions. In the case of CodeTriage, a strange thing was happening. An error was getting thrown, but there was nothing in the logs and no debug error page in development. When this happens it&amp;#39;s usually a bug in a rack middleware. You can get a list of them by running&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="sh"&gt;$ rake middleware
+use Rack::Sendfile
+use ActionDispatch::LoadInterlock
+use ActiveSupport::Cache::Strategy::LocalCache::Middleware
+use Rack::Runtime
+use Rack::MethodOverride
+use ActionDispatch::RequestId
+use Rails::Rack::Logger
+use ActionDispatch::ShowExceptions
+use WebConsole::Middleware
+use ActionDispatch::DebugExceptions
+use ActionDispatch::RemoteIp
+use ActionDispatch::Reloader
+use ActionDispatch::Callbacks
+use ActiveRecord::Migration::CheckPending
+use ActiveRecord::ConnectionAdapters::ConnectionManagement
+use ActiveRecord::QueryCache
+use ActionDispatch::Cookies
+use ActionDispatch::Session::CookieStore
+use ActionDispatch::Flash
+use Rack::Head
+use Rack::ConditionalGet
+use Rack::ETag
+use Warden::Manager
+use ActionView::Digestor::PerRequestDigestCacheExpiry
+use Bullet::Rack
+use OmniAuth::Strategies::GitHub
+run CodeTriage::Application.routes
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;The request enters at the top and goes to each middleware until finally it hits our application on the bottom &lt;code&gt;CodeTriage::Application.routes&lt;/code&gt;. If the error was being thrown by our app, then the &lt;code&gt;ActionDispatch::DebugExceptions&lt;/code&gt; middleware outputs error logs and would show a nice exception page in development. In my case that wasn&amp;#39;t happening, so I knew the error was somewhere before that point. &lt;/p&gt;
+
+&lt;p&gt;I bisected the problem by adding logging to &lt;code&gt;call&lt;/code&gt; methods. If the output showed up in STDOUT then I knew it was being called successfully and I should go higher up the Rack stack (which is confusing, because it is lower on this middleware list). After enough debugging, I finally found the exception was coming from &lt;code&gt;WebConsole::Middleware&lt;/code&gt;, which is naturally the last possible place an exception could occur before it gets caught by the &lt;code&gt;DebugExceptions&lt;/code&gt; middleware. Upgrading to master on web-console gem fixed the error. It turns out that placement is not by accident and web-console inserts itself before the debug middleware. I &lt;a href="https://github.com/rails/web-console/issues/178"&gt;opened an issue with web-console&lt;/a&gt; and &lt;a href="https://github.com/gsamokovarov"&gt;@gsamokovarov&lt;/a&gt; promptly added some code that detects when an internal error is thrown by web-console and makes sure it shows up in the logs. My rule of thumb is if something takes me over an hour to fix that could have been made much easier by exposing the errant behavior (such as logging an exception), then I report it as an issue to raise awareness of that failure mode. Sometimes the bug is well known but often maintainers don&amp;#39;t know what is difficult or hard to debug. If you have ideas on things to add to make using a piece of software easier, sharing it in a friendly and helpful way is good for everyone. &lt;/p&gt;
+
+&lt;p&gt;Keep manually testing your app until no errors and all errant behavior is gone. Once you&amp;#39;ve done this, you&amp;#39;re on the home stretch.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='testing' href='#testing'&gt;Testing&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Now the server and console are working, you want to get your test suite green &lt;code&gt;$ rake test&lt;/code&gt;. Rails 5 now includes a nice test runner &lt;code&gt;$ rails test&lt;/code&gt;; you can specify a particular file or a specific line to run &lt;code&gt;$ rails test test/unit/users.rb:58&lt;/code&gt;. &lt;/p&gt;
+
+&lt;p&gt;This step was bad, resulting in cryptic failures. I recommend picking 1 failure or error and focusing on it. Sometimes you&amp;#39;ll see 100 failures, but when you fix one, it resolves them all, as they were the same issue.&lt;/p&gt;
+
+&lt;p&gt;For CodeTriage, we were getting errors&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="sh"&gt;UserUpdateTest#test_updating_the_users_skip_issues_with_pr_setting_to_true:
+NoMethodError: undefined method `normalize_params&amp;#39; for Rack::Utils:Module
+    test/integration/user_update_test.rb:50:in `block in &amp;lt;class:UserUpdateTest&amp;gt;&amp;#39;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;A grep of my project indicated &lt;code&gt;normalize_params&lt;/code&gt; wasn&amp;#39;t being used. The error didn&amp;#39;t have a long backtrace. On that line &lt;code&gt;test/integration/user_update_test.rb:50&lt;/code&gt; we are using a &lt;a href="http://jnicklas.github.io/capybara/"&gt;capybara&lt;/a&gt; helper:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="ruby"&gt;click_button &amp;#39;Save&amp;#39;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;On a whim, I updated capybara and it resolved the error. Not sure why the backtrace was so short, that might be worth digging into later, as it would have made debugging faster.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='other-gotchas' href='#other-gotchas'&gt;Other gotchas&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;The Strong Params that you get in your controller have changed and are no longer inheriting from a hash. At the time, there was no deprecation, so I &lt;a href="https://github.com/rails/rails/pull/23123"&gt;added one&lt;/a&gt;. It&amp;#39;s just a deprecation, but you should still make sure you&amp;#39;re only using the approved API.&lt;/p&gt;
+
+&lt;p&gt;There was a change to &lt;code&gt;image_tag&lt;/code&gt; where it no longer takes &lt;code&gt;nil&lt;/code&gt; as an argument, this wasn&amp;#39;t used in production, but the tests (accidentally) depended on it.&lt;/p&gt;
+
+&lt;p&gt;With all of this together, we were ready for Rails 5 in the prime time. Here&amp;#39;s the &lt;a href="https://github.com/codetriage/codetriage/pull/435"&gt;PR&lt;/a&gt;&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='after-the-upgrade' href='#after-the-upgrade'&gt;After the Upgrade&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;We&amp;#39;re almost done! The last thing we need to do is to look for deprecations. They&amp;#39;ll show up in your logs like:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="sh"&gt;DEPRECATION WARNING: ActionController::TestCase HTTP request methods will accept only
+keyword arguments in future Rails versions.
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Or&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="sh"&gt;DEPRECATION WARNING: `redirect_to :back` is deprecated and will be removed from Rails 5.1. Please use `redirect_back(fallback_location: fallback_location)` where `fallback_location` represents the location to use if the request has no HTTP referer information. (called from block in &amp;lt;class:RepoSubscriptionsControllerTest&amp;gt; at /Users/richardschneeman/Documents/projects/codetriage/test/functional/repo_subscriptions_controller_test.rb:63)
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;A good deprecation will include the fix in the message. While you technically don&amp;#39;t &lt;strong&gt;have&lt;/strong&gt; to fix every deprecation, you&amp;#39;ll be glad you did when Rails 5.1 is released, because that upgrade will be even easier.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='regressions' href='#regressions'&gt;Regressions&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;As you rule out bugs coming from gems or your own code, you&amp;#39;ll want to report any regressions to &lt;a href="https://github.com/rails/rails/issues"&gt;https://github.com/rails/rails/issues&lt;/a&gt;. Please check for existing issues first. Unfortunately the tracker is only for bugs and pull requests, we can&amp;#39;t use it to help you with &amp;quot;my application won&amp;#39;t work&amp;quot; type problems. Take those issues to &lt;a href="http://stackoverflow.com"&gt;Stack Overflow&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='deploy-and-you-39-re-done' href='#deploy-and-you-39-re-done'&gt;Deploy and You&amp;#39;re Done&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Once your code works locally and your tests pass, make sure you&amp;#39;re happy with manually looking for regressions. I recommend either deploying to a staging app first or using Heroku&amp;#39;s &lt;a href="https://devcenter.heroku.com/articles/github-integration#review-apps"&gt;GitHub Review apps&lt;/a&gt;. -- That way you&amp;#39;ll have a production-ish copy of your web app attached to your pull request that everyone involved can review. Once you&amp;#39;re happy commit to git and then:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="sh"&gt;$ git push heroku master
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Watch your logs or bug tracking add-on for exceptions, remember you can always &lt;a href="https://devcenter.heroku.com/articles/releases#rollback"&gt;rollback&lt;/a&gt; if a critical problem comes up.&lt;/p&gt;
+
+&lt;p&gt;Upgrading takes time and patience but isn&amp;#39;t that complex. The earlier you upgrade the earlier bugs get found, reported, and fixed. Give it a try on a branch and see what happens.&lt;/p&gt;
+</description>
+      <author>Richard Schneeman</author>
+    </item>
+    <item>
+      <title>Here's Postgres 9.5: Now Available on Heroku</title>
+      <link>https://blog.heroku.com/archives/2016/1/7/postgres-95-now-available-on-heroku</link>
+      <pubDate>Thu, 07 Jan 2016 23:50:49 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/1/7/postgres-95-now-available-on-heroku</guid>
+      <description>&lt;p&gt;Heroku has long been committed to making PostgreSQL one of the best relational databases in the world. We’re also committed to giving you the ability to try the latest release as soon as it’s available. Today, we’re pleased to announce the public beta of Postgres 9.5 on Heroku. &lt;/p&gt;
+
+&lt;p&gt;&lt;a href="http://www.postgresql.org/about/news/1636/"&gt;PostgreSQL 9.5&lt;/a&gt; brings a bevy of super exciting new features with the most prominent being the new UPSERT functionality. UPSERT gives you the expected behavior of an insert, or, if there is a conflict, an update, and is performant without the risk of race conditions for your data. UPSERT was one of the last few detracting arguments against PostgreSQL. A special thanks goes to Peter Geoghegan on the Heroku Postgres team for committing the better part of two years developing the functionality as its primary author, along with contributions from Andres Freund from &lt;a href="https://www.citusdata.com/"&gt;Citus Data&lt;/a&gt; and Heikki Linnakangas. &lt;/p&gt;
+
+&lt;p&gt;You can get started right now with PostgreSQL 9.5 on Heroku by passing in the version flag during a provision request:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;heroku addons:create heroku-postgresql --version=9.5
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;This lets customers who want to try out the new release an easy way to do so, while customers who are happy with the current version can stay on 9.4 until 9.5 matures and we make it generally available. New databases will continue to default to 9.4. &lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='insert-on-conflict' href='#insert-on-conflict'&gt;INSERT … ON CONFLICT&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href="http://www.postgresql.org/docs/9.5/static/sql-insert.html#SQL-ON-CONFLICT"&gt;UPSERT&lt;/a&gt; is meant for use during an INSERT operation in the database. If during that insert procedure a conflict occurs because a record already exists in the database (&lt;a href="http://www.postgresql.org/docs/9.5/static/sql-insert.html#SQL-ON-CONFLICT"&gt;ON CONFLICT&lt;/a&gt;), the existing record would be updated instead of a new one being created. Digging a little deeper, this is what makes PostgeSQL’s UPSERT functionality so special. PostgreSQL UPSERT will determine if there’s a conflict based on a unique index in the table on specified set of columns. But, if that table has other unique indexes or unique constraints, PostgreSQL will throw a violation in the event of duplicates. This results in the database keeping your data safe by respecting all of the unique constraints within the table.&lt;/p&gt;
+
+&lt;p&gt;Let’s walk through an example. Assume that a PostgreSQL database has a table called &lt;code&gt;inventory&lt;/code&gt; that manages the current state of the amount of products in the warehouse. In that table, there are three columns, &lt;code&gt;product_id&lt;/code&gt;, &lt;code&gt;amount&lt;/code&gt;, and &lt;code&gt;notes&lt;/code&gt;. On top of that, let’s assume that there’s a unique index on &lt;code&gt;product_id&lt;/code&gt;. Let’s say that someone in our warehouse is keying in new information about what’s on hand. The application may or may not know if the product being keyed in actually exists in the inventory table. So during an insert, we’d rather update the amount instead of creating a new record. &lt;/p&gt;
+
+&lt;p&gt;Getting started with UPSERT is fairly easy. For any of your normal INSERT statements that you’ve created, a few more keywords are added to the end of the statement to invoke UPSERT. &lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;INSERT products (
+  product_id,
+  amount,
+  notes
+) VALUES (
+  1234,
+  10,
+  ‘some of the items are damaged’
+)
+ON CONFLICT (product_id) DO UPDATE notes = ‘arrived on time’;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Once you’ve specified the &lt;code&gt;ON CONFLICT&lt;/code&gt;, you have two options. The first is to tell PostgreSQL to update particular columns that you’ve defined and the second is to ignore the insert all together. With the new UPSERT functionality, this should greatly simplify application code. &lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='other-noteworthy-improvements' href='#other-noteworthy-improvements'&gt;Other Noteworthy Improvements&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="http://www.postgresql.org/docs/9.5/static/brin-intro.html"&gt;BRIN Indexes&lt;/a&gt; - This new type of index is great for very large tables where computing a normal index may be too expensive.&lt;/li&gt;
+&lt;li&gt;If you’ve ever wanted to summarize data in different ways, beyond what you could do in a &lt;code&gt;GROUP BY&lt;/code&gt; clause, &lt;a href="https://wiki.postgresql.org/wiki/What%27s_new_in_PostgreSQL_9.5#GROUPING_SETS.2C_CUBE_and_ROLLUP"&gt;new summarization primitives&lt;/a&gt; have been added.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='version-policy' href='#version-policy'&gt;Version Policy&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Postgres 9.5 is currently in beta. We encourage customers to wait to put their production applications on this new version until it officially reaches GA. Once we are confident that this new version is stable enough, based on discussions with customers and the community at large, we’ll make 9.5 the default for all new databases created on Heroku. &lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='getting-starting' href='#getting-starting'&gt;Getting Starting&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;UPSERT is only one of the &lt;a href="http://www.postgresql.org/docs/current/static/release-9-5.html"&gt;many exciting new improvements&lt;/a&gt; in this release of PostgreSQL 9.5. Give UPSERT and all the other new features a shot and let us know what you think!&lt;/p&gt;
+</description>
+      <author>Rimas Silkaitis</author>
+    </item>
+    <item>
+      <title>The Heroku 2015 Retrospective</title>
+      <link>https://blog.heroku.com/archives/2016/1/6/the_heroku_2015_retrospective</link>
+      <pubDate>Wed, 06 Jan 2016 20:52:54 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2016/1/6/the_heroku_2015_retrospective</guid>
+      <description>&lt;p&gt;As we start this New Year, we wanted to give you a recap of our 2015, a year filled with a lot of new products and features. We especially want to express our gratitude to everyone who helped us with inspiration, beta testing, and feedback. In case you missed anything, here are the highlights of 2015. &lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='advancing-the-developer-experience' href='#advancing-the-developer-experience'&gt;Advancing the Developer Experience&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-github-integration-review-apps-review-apps-a' href='#a-href-https-devcenter-heroku-com-articles-github-integration-review-apps-review-apps-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/github-integration-review-apps"&gt;Review Apps&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;With Review Apps, for every GitHub pull request, Heroku spins up a disposable Review App so everyone on your team can see the changes live, speeding up decisions and leading to higher quality apps.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-dyno-types-new-dynos-a' href='#a-href-https-devcenter-heroku-com-articles-dyno-types-new-dynos-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/dyno-types"&gt;New Dynos&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Build apps at any scale on Heroku with a new lineup of dyno types and prices: Performance-L, Performance-M, Standard 1X and 2X, Hobby, and Free. &lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-github-integration-github-integration-a' href='#a-href-https-devcenter-heroku-com-articles-github-integration-github-integration-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/github-integration"&gt;GitHub Integration&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Connect your GitHub repo to automatically or manually deploy to a Heroku app on every push to a branch.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-pipelines-pipelines-a' href='#a-href-https-devcenter-heroku-com-articles-pipelines-pipelines-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/pipelines"&gt;Pipelines&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Pipelines are a clear and structured workflow for a group of apps that share the same codebase, allowing teams to visualize and manage the continuous delivery of changes from development to production.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-docker-local-docker-builds-a' href='#a-href-https-devcenter-heroku-com-articles-docker-local-docker-builds-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/docker"&gt;Local Docker Builds&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Develop and deploy apps locally using a Cedar-like Docker container and then deploy to Heroku for high fidelity dev/prod parity.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-elements-heroku-com-heroku-elements-a' href='#a-href-https-elements-heroku-com-heroku-elements-a'&gt;&lt;a href="https://elements.heroku.com"&gt;Heroku Elements&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Heroku Elements brings the entire Heroku ecosystem of add-ons, buildpacks, and buttons together in one place so you can extend your app, customize your stack, and jump-start your project.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-go-support-official-go-support-a' href='#a-href-https-devcenter-heroku-com-articles-go-support-official-go-support-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/go-support"&gt;Official Go Support&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Use the Heroku developer experience to build Go apps and get fast support for latest Go versions and notifications of critical vulnerabilities.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-blog-heroku-com-archives-2015-10-22-heroku-plus-parse-parse-heroku-a' href='#a-href-https-blog-heroku-com-archives-2015-10-22-heroku-plus-parse-parse-heroku-a'&gt;&lt;a href="https://blog.heroku.com/archives/2015/10/22/heroku-plus-parse"&gt;Parse + Heroku&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Build mobile apps with the convenience of Parse’s cross-platform mobile SDKs together with the flexibility and scale of Heroku for the backend.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-php-support-php-7-a' href='#a-href-https-devcenter-heroku-com-articles-php-support-php-7-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/php-support"&gt;PHP 7&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Build PHP apps on Heroku taking advantage of PHP 7’s new features, including higher performance, new operators, anonymous classes, and many more.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='get-more-from-your-data-on-heroku' href='#get-more-from-your-data-on-heroku'&gt;Get More from Your Data on Heroku&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-heroku-redis-heroku-redis-a' href='#a-href-https-devcenter-heroku-com-articles-heroku-redis-heroku-redis-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/heroku-redis"&gt;Heroku Redis&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Heroku Redis combines the in-memory key-value store you love with a robust developer experience, all delivered as a service by Heroku’s operational experts.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-heroku-data-links-heroku-data-links-a' href='#a-href-https-devcenter-heroku-com-articles-heroku-data-links-heroku-data-links-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/heroku-data-links"&gt;Heroku Data Links&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Use a Postgres database to federate data across other data stores like Redis, giving you the benefits of data federation and the ability to use SQL to query data across local and remote data stores.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-heroku-postgresql-version-support-and-legacy-infrastructure-postgres-9-4-a' href='#a-href-https-devcenter-heroku-com-articles-heroku-postgresql-version-support-and-legacy-infrastructure-postgres-9-4-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/heroku-postgresql#version-support-and-legacy-infrastructure"&gt;Postgres 9.4&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Take advantage of increased performance with materialized views and the new JSONB data type with GIN indexes for faster access to JSON data.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-heroku-postgres-backups-pgbackups-a' href='#a-href-https-devcenter-heroku-com-articles-heroku-postgres-backups-pgbackups-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/heroku-postgres-backups"&gt;PGBackups&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;You can schedule backups with the new PGBackups, and have greater reliability in your backup jobs. &lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-dataclips-new-dataclips-a' href='#a-href-https-devcenter-heroku-com-articles-dataclips-new-dataclips-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/dataclips"&gt;New Dataclips&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Everyone on your team, including non-developers, can be more productive with data on Heroku using the new Dataclips, thanks to a redesigned UX, fast search for discovery, and bulk recovery options.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-herokuconnect-available-plans-heroku-connect-demo-edition-a' href='#a-href-https-devcenter-heroku-com-articles-herokuconnect-available-plans-heroku-connect-demo-edition-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/herokuconnect#available-plans"&gt;Heroku Connect Demo Edition&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Get hands-on using a free version of Heroku Connect to prototype applications that sync data between Heroku Postgres and Salesforce.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='heroku-enterprise-advanced-controls-for-large-organizations' href='#heroku-enterprise-advanced-controls-for-large-organizations'&gt;Heroku Enterprise: Advanced Controls for Large Organizations&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-heroku-enterprise-heroku-enterprise-a' href='#a-href-https-devcenter-heroku-com-articles-heroku-enterprise-heroku-enterprise-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/heroku-enterprise"&gt;Heroku Enterprise&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Heroku Enterprise is a new edition of Heroku that helps large organizations take advantage of the Heroku developer experience while meeting their unique needs for more advanced collaboration, better access controls, and enterprise-grade support.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-blog-heroku-com-archives-2015-9-10-heroku_private_spaces_private_paas_delivered_as_a_service-private-spaces-a' href='#a-href-https-blog-heroku-com-archives-2015-9-10-heroku_private_spaces_private_paas_delivered_as_a_service-private-spaces-a'&gt;&lt;a href="https://blog.heroku.com/archives/2015/9/10/heroku_private_spaces_private_paas_delivered_as_a_service"&gt;Private Spaces&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Private Spaces is a new runtime that delivers the same great Heroku developer experience, enhanced with network isolation and control for a group of apps and data you define.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-devcenter-heroku-com-articles-app-privileges-in-heroku-organizations-fine-grained-access-controls-a' href='#a-href-https-devcenter-heroku-com-articles-app-privileges-in-heroku-organizations-fine-grained-access-controls-a'&gt;&lt;a href="https://devcenter.heroku.com/articles/app-privileges-in-heroku-organizations"&gt;Fine Grained Access Controls&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Use roles and app privileges to manage access to apps at different levels of granularity in your Organization account.  &lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='a-href-https-blog-heroku-com-archives-2015-12-17-sso-for-heroku-sso-for-heroku-a' href='#a-href-https-blog-heroku-com-archives-2015-12-17-sso-for-heroku-sso-for-heroku-a'&gt;&lt;a href="https://blog.heroku.com/archives/2015/12/17/SSO-for-Heroku"&gt;SSO for Heroku&lt;/a&gt;&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Single Sign-on (SSO) for Heroku lets you use SAML 2.0 Identity Providers to log into Heroku.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='the-year-ahead' href='#the-year-ahead'&gt;The Year Ahead&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Building on the momentum of 2015, we look forward to continuing to make building amazing apps even easier. We have many exciting features planned across developer experience, data, collaboration and enterprise that will expand Heroku to far many more use cases in 2016, and we can’t wait to share them with you! We always love hearing from you on the features we shipped and the ones you would like to see us ship, so send us &lt;a href="mailto:feedback@heroku.com"&gt;feedback&lt;/a&gt;.&lt;/p&gt;
+</description>
+      <author>Vikram Rana</author>
+    </item>
+    <item>
+      <title>Ruby 2.3 on Heroku with Matz</title>
+      <link>https://blog.heroku.com/archives/2015/12/25/ruby-2-3-0-on-heroku-with-matz</link>
+      <pubDate>Fri, 25 Dec 2015 07:20:43 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2015/12/25/ruby-2-3-0-on-heroku-with-matz</guid>
+      <description>&lt;p&gt;Happy Holidays from Heroku. Congratulations to the ruby-core team on a successful &lt;a href="https://www.ruby-lang.org/en/news/2015/12/25/ruby-2-3-0-released/"&gt;2.3.0 release&lt;/a&gt;, which is &lt;a href="https://devcenter.heroku.com/changelog-items/787"&gt;now available on Heroku&lt;/a&gt; -- you can learn more about Ruby on Heroku at &lt;a href="https://heroku.com/ruby"&gt;heroku.com/ruby&lt;/a&gt;. We had the pleasure of speaking with &lt;a href="https://twitter.com/yukihiro_matz"&gt;Matz&lt;/a&gt; (Yukihiro Matsumoto), the creator of Ruby and Chief Ruby Architect at Heroku, about the release.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='what-s-new-in-ruby-2-3-interview-with-matz' href='#what-s-new-in-ruby-2-3-interview-with-matz'&gt;What’s New in Ruby 2.3: Interview with Matz&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='ruby-releases-happen-every-year-on-christmas-day-why-christmas' href='#ruby-releases-happen-every-year-on-christmas-day-why-christmas'&gt;Ruby releases happen every year on Christmas day. Why Christmas?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Ruby was originally my pet project, my side project. So releases usually happened during my holiday time. Now, it’s a tradition. It’s ruby-core’s gift to the Ruby community.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='do-you-have-any-favorite-features-coming-in-ruby-2-3' href='#do-you-have-any-favorite-features-coming-in-ruby-2-3'&gt;Do you have any favorite features coming in Ruby 2.3?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;I’m excited about the safe navigation operator, or “lonely operator.” It’s similar to what we see in other programming languages like Swift and Groovy— it makes it simple to handle exceptions. The basic idea is from Objective C in which &lt;code&gt;nil&lt;/code&gt; accepts every message and returns &lt;code&gt;nil&lt;/code&gt; without doing anything. In that way you can safely ignore the error that is denoted by &lt;code&gt;nil&lt;/code&gt;. In Swift, they have better error handling using optional types, but the fundamental idea is the same. Instead of using &lt;code&gt;nil&lt;/code&gt;, they use optional types.&lt;/p&gt;
+
+&lt;p&gt;Since Ruby is an older language, it follows the old way. In the very early stages of Ruby, before releasing in 1995, I added that &lt;code&gt;nil&lt;/code&gt; pattern in the language. But it consumed all the errors, which meant error detection was terrible, so I gave up that idea. With the new operator, you can use the &lt;code&gt;nil&lt;/code&gt; pattern and avoid accidentally ignoring errors.&lt;/p&gt;
+
+&lt;p&gt;Swift and Groovy use a different operator:  &lt;code&gt;?.&lt;/code&gt; (question dot). And Ruby couldn’t use that because of predicate methods. So I coined it from the &lt;code&gt;&amp;amp;.&lt;/code&gt; (ampersand dot) pattern.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='was-there-any-discussion-of-adopting-active-support-s-code-try-code' href='#was-there-any-discussion-of-adopting-active-support-s-code-try-code'&gt;Was there any discussion of adopting Active Support’s &lt;code&gt;try&lt;/code&gt;?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;The &lt;code&gt;try&lt;/code&gt; uses the &lt;code&gt;send&lt;/code&gt; method, which is not really fast enough. I believe those kind of things should be built into the language.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='what-are-some-other-highlights-in-2-3' href='#what-are-some-other-highlights-in-2-3'&gt;What are some other highlights in 2.3?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;The &lt;a href="https://github.com/yuki24/did_you_mean"&gt;did_you_mean gem&lt;/a&gt;, which helps with method name misspellings, is great as a default feature. We bundle it now, so it’s now a default and you don’t have to do anything extra.&lt;/p&gt;
+
+&lt;p&gt;We included it because for Ruby 3 we’re working towards better compilation and collaboration, and this is the first step in that direction. Better error messages help developers’ productivity and happiness.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='are-there-any-features-that-are-not-getting-the-attention-they-deserve-or-may-surprise-developers' href='#are-there-any-features-that-are-not-getting-the-attention-they-deserve-or-may-surprise-developers'&gt;Are there any features that are not getting the attention they deserve or may surprise developers?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;I don’t know. I like the new &lt;code&gt;dig&lt;/code&gt; method, which is related to the safe navigation operator. It makes it simple to “dig up” nested elements from nested hashes and arrays, which is useful when dealing with parsed JSON. These days, this method is kind of popular, especially when using an API for microservices. In such cases, the &lt;code&gt;dig&lt;/code&gt; method and safe navigation operator would be quite useful, especially with optional attributes.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='are-there-any-features-that-you-secretly-hope-no-one-will-use-so-you-can-remove-them-later' href='#are-there-any-features-that-you-secretly-hope-no-one-will-use-so-you-can-remove-them-later'&gt;Are there any features that you secretly hope no one will use, so you can remove them later?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;No, but the frozen string literal pragma is kind of controversial. We might change it in a later version.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='how-would-you-decide-if-it-stays-or-goes' href='#how-would-you-decide-if-it-stays-or-goes'&gt;How would you decide if it stays or goes?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;The Rails team got a lot of pull requests that say add the &lt;code&gt;freeze&lt;/code&gt; everywhere. The literal &lt;code&gt;freeze&lt;/code&gt; method is much faster by comparison in 2.2. People wanted to make it faster by avoiding the string allocation and reducing the GC pressure.&lt;/p&gt;
+
+&lt;p&gt;We understood that intention, but adding a &lt;code&gt;freeze&lt;/code&gt; everywhere is so ugly and we didn’t want that. That’s why we introduced the magic comment of frozen string literals. At the same time, I don’t like that a magic comment can change the semantics or behavior of the language. So that point is kind of controversial. We’ll see how well it works out.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='do-you-anticipate-any-backwards-compatibility-issues-when-migrating-from-ruby-2-3-to-ruby-3' href='#do-you-anticipate-any-backwards-compatibility-issues-when-migrating-from-ruby-2-3-to-ruby-3'&gt;Do you anticipate any backwards-compatibility issues when migrating from Ruby 2.3 to Ruby 3?&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;Fundamentally, we will not change anything in a backward incompatible way. I expect every Ruby 2.x program to run without any modification in the future version of Ruby. Even the frozen strings stuff is basically compatible.&lt;/p&gt;
+
+&lt;p&gt;In Ruby 3, if we do have to make an incompatible change, we have to provide a reasonable reason. And also we have to provide a migration path that is not too difficult. That’s our strategy towards the future version.&lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='thank-you-for-your-time' href='#thank-you-for-your-time'&gt;Thank you for your time!&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;I hope we can have this kind of conversation again in the future!&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;This interview was conducted by Terence Lee and Richard Schneeman, members of Heroku’s Ruby Task Force. You can find them on twitter, &lt;a href="https://twitter.com/hone02"&gt;@hone02&lt;/a&gt; and &lt;a href="https://twitter.com/schneems"&gt;@schneems&lt;/a&gt;.&lt;/em&gt;&lt;/p&gt;
+</description>
+      <author>Terence Lee</author>
+    </item>
+    <item>
+      <title>SSO for Heroku now in Public Beta</title>
+      <link>https://blog.heroku.com/archives/2015/12/17/SSO-for-Heroku</link>
+      <pubDate>Thu, 17 Dec 2015 01:14:11 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2015/12/17/SSO-for-Heroku</guid>
+      <description>&lt;p&gt;We&amp;#39;re pleased to announce the beta of &lt;a href="https://devcenter.heroku.com/articles/sso-for-heroku"&gt;SSO for Heroku&lt;/a&gt;.  With this beta, Heroku now supports the current and most widely supported SSO standard known as SAML 2.0, and has partnered with leading identity providers (IdPs) for easy set-up.  Customers can use their existing identity provider like &lt;a href="https://www.salesforce.com/platform/products/identity/"&gt;Salesforce Identity&lt;/a&gt;, Okta, PingOne, Microsoft Active Directory, and PingFederate for their employees&amp;#39; single sign-on to &lt;a href="https://www.heroku.com/enterprise"&gt;Heroku Enterprise&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1450315053-App%20Launcher.png" alt="SSO for Heroku using Salesforce Identity as IdP"&gt;&lt;/p&gt;
+
+&lt;p&gt;SSO is expected to be generally available in early February.  Initially, it will be available to Heroku Enterprise customers.  For enterprise customers who want to use the feature during the beta period, it is now available in the &amp;quot;Settings&amp;quot; tab of their Heroku org.&lt;/p&gt;
+
+&lt;p&gt;We&amp;#39;ve worked hard to make the set up easy (a few minutes in most cases), yet flexible enough to robustly support less common or home-grown IdPs.  Connecting existing identity solutions to Heroku is straightforward for identity administrators, as is setting up a new IdP with Heroku.  End-users are presented with a guided two-step upgrade path to SSO when they are added to the IdP, and new user accounts are auto-provisioned in real-time based on the IdP authentication.&lt;/p&gt;
+
+&lt;p&gt;We are also partnering with major identity providers to build Heroku support into their products.  So for leading IdPs -- like Salesforce Identity, Okta, PingOne, and PingFederate --  set-up for system administrators can be as easy as adding Heroku as a known and supported &amp;quot;service provider,&amp;quot; and providing the Heroku organization name.  In a few clicks both the IdP and Heroku will be fully set up and ready for test, and then for easy deployment to the entire company.   Other popular cloud-based IdPs will be launching built-in support for Heroku in the first quarter of 2016.  All operate with the high level of security and reliability Heroku customers have come to expect from our products and partners.&lt;/p&gt;
+
+&lt;p&gt;Additionally, SSO for Heroku fully supports Microsoft&amp;#39;s Active Directory.  SSO support in Heroku also works well with minimal but manual set-up for most other SAML 2.0 compliant identity provider solutions.&lt;/p&gt;
+
+&lt;p&gt;Heroku Enterprise customers who would like to be part of the beta can start now.  We welcome your questions or feedback; you can reach us at &lt;a href="mailto:sso-beta@heroku.com"&gt;sso-beta@heroku.com&lt;/a&gt; .&lt;/p&gt;
+</description>
+      <author>Ike DeLorenzo</author>
+    </item>
+    <item>
+      <title>50% and Counting: PHP 7 Takes Off</title>
+      <link>https://blog.heroku.com/archives/2015/12/15/php7</link>
+      <pubDate>Tue, 15 Dec 2015 15:47:41 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2015/12/15/php7</guid>
+      <description>&lt;p&gt;A year and half ago, we launched support for &lt;a href="https://heroku.com/php"&gt;PHP on Heroku&lt;/a&gt;, built from the ground up with modern features designed to give developers a more elegant and productive experience on the platform. Last week, we made &lt;a href="https://devcenter.heroku.com/changelog-items/777"&gt;PHP 7 available&lt;/a&gt; on top of a new, reworked version of our PHP support, and our users are adopting PHP 7’s exciting new features and stellar performance improvements quickly—we’re already seeing &lt;strong&gt;PHP 7 being used in the majority of PHP deploys&lt;/strong&gt; on Heroku.&lt;/p&gt;
+&lt;p&gt;Under the hood, much of the logic that handles a deploy has changed, but not the fundamental principles upon which our support for PHP applications is designed. We&amp;#39;ve always been determined to provide a fully standards-based implementation that does not rely on proprietary configuration or magic behavior, and that means building on top of a great foundation of tools.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='composer-rising' href='#composer-rising'&gt;Composer Rising&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Inspired by an explosion of collaboration in Open Source that had been sparked by GitHub in general and their &lt;a href="https://github.com/blog/712-pull-requests-2-0"&gt;Pull Requests 2.0&lt;/a&gt; in particular, the PHP ecosystem witnessed the birth of Composer in 2011. Thanks to the inspiring and ongoing work of &lt;a href="https://twitter.com/seldaek"&gt;Jordi Boggiano&lt;/a&gt;, &lt;a href="https://twitter.com/naderman"&gt;Nils Adermann&lt;/a&gt;, and all other contributors to the Composer project, the result has been a perpetual cycle of growth in collaboration, quality and popularity across frameworks and libraries.&lt;/p&gt;
+
+&lt;p&gt;Today, even competing frameworks make liberal use of each other’s components, because the PHP community at large has adopted a culture of sharing and of working together. Developers benefit from faster release cycles and a wealth of packages to choose from. Packagist, the official Composer package repository, is now serving &lt;a href="https://packagist.org/statistics"&gt;well over 100 million package installs per month&lt;/a&gt;, and will be on the verge of cracking the mark of a billion and a half installs before this year is out.&lt;/p&gt;
+
+&lt;p&gt;That&amp;#39;s why Heroku has always honored a project’s &lt;code&gt;composer.json&lt;/code&gt; (or, more specifically, &lt;code&gt;composer.lock&lt;/code&gt;) for not only the installation of dependencies, but also when resolving which language runtimes and extensions to install—there is no admin panel or separate configuration for runtimes and extensions. If a user requires PHP &lt;code&gt;5.5.*&lt;/code&gt;, they get the latest PHP 5.5. If a user wants the latest possible PHP version, but also needs an extension that is not yet available for PHP 7, they get the latest PHP 5.6.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1450143538-php-7.png" alt="php-7"&gt;&lt;/p&gt;
+
+&lt;p&gt;Thanks to this behavior, we&amp;#39;ve already seen a lot of deploys getting resolved to PHP 7. Currently, &lt;strong&gt;over 50% of all PHP application deploys on Heroku are getting built using PHP 7.0&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;This number could be even higher, but we&amp;#39;re being cautious about the default version—if a user specifies absolutely nothing regarding their required PHP version, they will get the latest PHP 5.6, as that is a safer bet for backwards compatibility with legacy applications. Extensions are also a factor: once common ones like &lt;code&gt;memcached&lt;/code&gt; or &lt;code&gt;redis&lt;/code&gt; are ready for PHP 7, we&amp;#39;re expecting even more applications to make the switch.&lt;/p&gt;
+
+&lt;p&gt;The system now actually uses Composer itself during the build to install not only application dependencies, but also language runtimes and extensions. This allows us to give users useful hints about requirements that cannot be satisfied, or conditionally auto-install extensions for add-ons such as &lt;a href="https://elements.heroku.com/addons/blackfire"&gt;Blackfire&lt;/a&gt; or &lt;a href="https://elements.heroku.com/addons/newrelic"&gt;New Relic&lt;/a&gt; without interfering with the pre-determined set of dependencies. We will be rolling out even more exciting user-facing features and performance improvements that build upon this architecture in the coming weeks and months.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='take-it-for-a-spin' href='#take-it-for-a-spin'&gt;Take It For a Spin&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;All you need to deploy an application using PHP 7 today is a &lt;code&gt;composer.json&lt;/code&gt; that has a sufficiently lenient version selector for PHP 7. You should also ensure that none of your dependencies prevent the use of PHP 7. The &lt;a href="https://devcenter.heroku.com/articles/php-support"&gt;PHP Support&lt;/a&gt; reference article on Heroku Dev Center provides an overview of available runtimes and extensions.&lt;/p&gt;
+
+&lt;p&gt;Our &lt;a href="https://devcenter.heroku.com/articles/getting-started-with-php"&gt;Getting Started with PHP on Heroku&lt;/a&gt; guide will walk you through the simple steps of creating a free Heroku account (if you don&amp;#39;t have one yet) and deploying your first app—it&amp;#39;ll be built using PHP 7!&lt;/p&gt;
+
+&lt;p&gt;Alternatively, why not start a new app from scratch, or deploy an existing application? Any suitable version requirement for package &lt;code&gt;php&lt;/code&gt; such as &lt;code&gt;&amp;gt;=5.3.3&lt;/code&gt; or &lt;code&gt;^5.6.0|^7.0.0&lt;/code&gt; will work. You can use the &lt;code&gt;composer require&lt;/code&gt; command to quickly update your preferences to allow both 5.6+ and 7, e.g.:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ composer require &amp;quot;php:^5.6|^7.0&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;After that, &lt;code&gt;git add composer.json composer.lock&lt;/code&gt;, commit the change, and push!&lt;/p&gt;
+</description>
+      <author>David Zuelke</author>
+    </item>
+    <item>
+      <title>10 Habits of a Happy Node Hacker (2016)</title>
+      <link>https://blog.heroku.com/archives/2015/11/10/node-habits-2016</link>
+      <pubDate>Tue, 10 Nov 2015 17:44:44 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2015/11/10/node-habits-2016</guid>
+      <description>&lt;p&gt;At the tail end of 2015, JavaScript developers have a glut
+of tools at our disposal. The
+&lt;a href="https://blog.heroku.com/archives/2014/3/11/node-habits"&gt;last time&lt;/a&gt;
+we looked into this, the modern JS landscape was just emerging.
+Today, it&amp;#39;s easy to get lost in our huge ecosystem,
+so successful teams follow guidelines to
+make the most of their time and keep their projects healthy.&lt;/p&gt;
+
+&lt;p&gt;Here are ten habits for happy Node.js hackers as we enter 2016.
+They&amp;#39;re specifically for &lt;em&gt;app developers&lt;/em&gt;, rather than module authors,
+since those groups have different goals and constraints:&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='1-start-every-new-project-with-npm-init' href='#1-start-every-new-project-with-npm-init'&gt;1. Start every new project with npm init&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Npm&amp;#39;s &lt;code&gt;init&lt;/code&gt; command will scaffold out a valid package.json for your project,
+inferring common properties from the working directory.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="term"&gt;$ mkdir my-awesome-app
+$ cd my-awesome-app
+$ npm init --yes
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;I&amp;#39;m lazy, so I run it with the &lt;code&gt;--yes&lt;/code&gt; flag and then open package.json to make changes.
+The first thing you should do is specify an &amp;#39;engines&amp;#39; key
+with your current version of node (&lt;code&gt;node -v&lt;/code&gt;):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="json"&gt;&amp;quot;engines&amp;quot;: {
+  &amp;quot;node&amp;quot;: &amp;quot;4.2.1&amp;quot;
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='2-use-a-smart-npmrc' href='#2-use-a-smart-npmrc'&gt;2. Use a smart .npmrc&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;By default, npm doesn&amp;#39;t save installed dependencies to package.json
+(and you should always track your dependencies!).&lt;/p&gt;
+
+&lt;p&gt;If you use the &lt;code&gt;--save&lt;/code&gt; flag to auto-update package.json, npm
+installs the packages with a leading carat (&lt;code&gt;^&lt;/code&gt;), putting your
+modules at risk of drifting to different versions.
+This is fine for module development, but not good for apps,
+where you want to keep consistent dependencies between all your environments.&lt;/p&gt;
+
+&lt;p&gt;One solution is installing packages like this:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="term"&gt;$ npm install foobar --save --save-exact
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Even better, you can set these options in &lt;code&gt;~/.npmrc&lt;/code&gt; to update your defaults:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="term"&gt;$ npm config set save=true
+$ npm config set save-exact=true
+$ cat ~/.npmrc
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Now, &lt;code&gt;npm install foobar&lt;/code&gt; will automatically add &lt;code&gt;foobar&lt;/code&gt; to package.json
+and your dependencies won&amp;#39;t drift between installs!&lt;/p&gt;
+
+&lt;p&gt;If you prefer to keep flexible dependencies in package.json, but still need to lock down dependencies for production, you can alternatively build &lt;a href="https://docs.npmjs.com/cli/shrinkwrap"&gt;npm&amp;#39;s shrinkwrap&lt;/a&gt; into your workflow.
+This takes a little more effort, but has the added benefit of preserving
+exact versions of nested dependencies.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='3-hop-on-the-es6-train' href='#3-hop-on-the-es6-train'&gt;3. Hop on the ES6 train&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Node 4+ packs &lt;a href="https://nodejs.org/en/blog/release/v4.0.0/"&gt;an updated V8 engine&lt;/a&gt;
+with several useful &lt;a href="https://nodejs.org/en/docs/es6/"&gt;ES6 features&lt;/a&gt;.
+Don&amp;#39;t be intimidated by some of the more complex stuff,
+you can learn it as you go. There are plenty of simple
+improvements for immediate gratification:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="js"&gt;let user = users.find(u =&amp;gt; u.id === ID);
+
+console.log(`Hello, ${ user.name }!`);
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='4-stick-with-lowercase' href='#4-stick-with-lowercase'&gt;4. Stick with lowercase&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Some languages encourage filenames that match class names,
+like &lt;code&gt;MyClass&lt;/code&gt; and &amp;#39;MyClass.js&amp;#39;. Don&amp;#39;t do that in node.
+Instead, use lowercase files:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="js"&gt;let MyClass = require(&amp;#39;my-class&amp;#39;);
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Node.js is the rare example of a Linux-centric
+tool with great cross-platform support. While OSX
+and Windows will treat &amp;#39;myclass.js&amp;#39; and &amp;#39;MyClass.js&amp;#39; equivalently,
+Linux won&amp;#39;t. To write code that&amp;#39;s portable between platforms,
+you&amp;#39;ll need to exactly match &lt;code&gt;require&lt;/code&gt; statements,
+&lt;em&gt;including capitalization.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;The easy way to get this right is to just stick with lowercase
+filenames for everything, eg &amp;#39;my-class.js&amp;#39;.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='5-cluster-your-app' href='#5-cluster-your-app'&gt;5. Cluster your app&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Since the node runtime is limited to a single CPU core and about 1.5 GB
+of memory, deploying a non-clustered node app on a large
+server is a huge waste of resources.&lt;/p&gt;
+
+&lt;p&gt;To take advantage of multiple cores and memory beyond 1.5 GB,
+bake &lt;a href="https://nodejs.org/api/cluster.html"&gt;Cluster support&lt;/a&gt;
+into your app.
+Even if you&amp;#39;re only running a single process on small hardware
+today, Cluster gives you easy flexibility for the future.&lt;/p&gt;
+
+&lt;p&gt;Testing is the best way to determine the ideal number of
+clustered processes for your app, but it&amp;#39;s good to start with the
+&lt;a href="https://devcenter.heroku.com/articles/node-concurrency"&gt;reasonable defaults&lt;/a&gt;
+offered by your platform, with a simple fallback, eg:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="js"&gt;const CONCURRENCY = process.env.WEB_CONCURRENCY || 1;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Choose a
+&lt;a href="https://www.npmjs.com/search?q=cluster"&gt;Cluster abstraction&lt;/a&gt;
+to avoid reinventing the wheel of process management.
+If you&amp;#39;d like separate master and worker files, you can try
+&lt;a href="https://www.npmjs.com/package/forky"&gt;forky&lt;/a&gt;.
+If you prefer a single entrypoint file and function,
+take a look at &lt;a href="https://www.npmjs.com/package/throng"&gt;throng&lt;/a&gt;.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='6-be-environmentally-aware' href='#6-be-environmentally-aware'&gt;6. Be environmentally aware&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Don&amp;#39;t litter your project with environment-specific config files!
+Instead, take advantage of &lt;em&gt;environment variables&lt;/em&gt;.&lt;/p&gt;
+
+&lt;p&gt;First, install &lt;a href="https://github.com/strongloop/node-foreman"&gt;node-foreman&lt;/a&gt;:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="term"&gt;$ npm install --save --save-exact foreman
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Next, create a &lt;a href="https://devcenter.heroku.com/articles/procfile"&gt;Procfile&lt;/a&gt; to specify your app&amp;#39;s process types:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;web: bin/web
+worker: bin/worker
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Now you can start your app with the &lt;code&gt;nf&lt;/code&gt; binary:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="js"&gt;&amp;quot;scripts&amp;quot;: {
+  &amp;quot;start&amp;quot;: &amp;quot;nf start&amp;quot;
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;To provide a local development environment, create a
+.gitignore&amp;#39;d &lt;code&gt;.env&lt;/code&gt; file, which will be loaded by node-foreman:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;DATABASE_URL=&amp;#39;postgres://localhost/foobar&amp;#39;
+HTTP_TIMEOUT=10000
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Now, a single command (&lt;code&gt;npm start&lt;/code&gt;) will spin up both
+a &lt;code&gt;web&lt;/code&gt; process and a &lt;code&gt;worker&lt;/code&gt; process in that environment.
+And, when you deploy your project, it will &lt;a href="http://12factor.net/config"&gt;automatically adapt&lt;/a&gt;
+to the variables on its new host.&lt;/p&gt;
+
+&lt;p&gt;This is simpler and more flexible than &amp;#39;config/abby-dev.js&amp;#39;,
+&amp;#39;config/brian-dev.js&amp;#39;, &amp;#39;config/qa1.js&amp;#39;, &amp;#39;config/qa2.js&amp;#39;, &amp;#39;config/prod.js&amp;#39;, etc.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='7-avoid-garbage' href='#7-avoid-garbage'&gt;7. Avoid garbage&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Node (V8) uses a lazy and greedy garbage collector.
+With its default limit of about 1.5 GB, it sometimes waits until it
+absolutely has to before reclaiming unused memory.
+If your memory usage is increasing, it might not be a leak -
+but rather &lt;a href="https://github.com/nodejs/node/issues/3370#issuecomment-148108323"&gt;node&amp;#39;s usual lazy behavior&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;To gain more control over your app&amp;#39;s garbage collector, you can
+provide flags to V8 in your &lt;code&gt;Procfile&lt;/code&gt;:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;web: node --optimize_for_size --max_old_space_size=920 --gc_interval=100 server.js
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;This is especially important if your app is running
+in an environment with less than 1.5 GB of available memory.
+For example, if you&amp;#39;d like to tailor node to a 512 MB container, try:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;web: node --optimize_for_size --max_old_space_size=460 --gc_interval=100 server.js
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='8-hook-things-up' href='#8-hook-things-up'&gt;8. Hook things up&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Npm&amp;#39;s &lt;a href="https://docs.npmjs.com/misc/scripts"&gt;lifecycle scripts&lt;/a&gt;
+make great hooks for automation.
+If you need to run something before building your app,
+you can use the &lt;code&gt;preinstall&lt;/code&gt; script.
+Need to build assets with grunt, gulp, browserify, or webpack?
+Do it in a &lt;code&gt;postinstall&lt;/code&gt; script.&lt;/p&gt;
+
+&lt;p&gt;In package.json:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="js"&gt;&amp;quot;scripts&amp;quot;: {
+  &amp;quot;postinstall&amp;quot;: &amp;quot;bower install &amp;amp;&amp;amp; grunt build&amp;quot;,
+  &amp;quot;start&amp;quot;: &amp;quot;nf start&amp;quot;
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;You can also use environment variables to control these scripts:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="js"&gt;&amp;quot;postinstall&amp;quot;: &amp;quot;if $BUILD_ASSETS; then npm run build-assets; fi&amp;quot;,
+&amp;quot;build-assets&amp;quot;: &amp;quot;bower install &amp;amp;&amp;amp; grunt build&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;If your scripts start getting out of control, move them to files:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="js"&gt;&amp;quot;postinstall&amp;quot;: &amp;quot;scripts/postinstall.sh&amp;quot;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Scripts in package.json automatically have &lt;code&gt;./node_modules/.bin&lt;/code&gt;
+added to their &lt;code&gt;PATH&lt;/code&gt;, so you can execute binaries like
+&lt;code&gt;bower&lt;/code&gt; or &lt;code&gt;webpack&lt;/code&gt; directly.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='9-only-git-the-important-bits' href='#9-only-git-the-important-bits'&gt;9. Only git the important bits&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Most apps are composed of both necessary files and generated files.
+When using a source control system like git, you should avoid tracking anything that&amp;#39;s generated.&lt;/p&gt;
+
+&lt;p&gt;For example, your node app probably has a &lt;code&gt;node_modules&lt;/code&gt; directory for dependencies, which you
+&lt;a href="https://docs.npmjs.com/misc/faq#should-i-check-my-node-modules-folder-into-git"&gt;should keep out of git&lt;/a&gt;.
+As long as each dependency is listed in package.json, anyone can create a working
+local copy of your app - including &lt;code&gt;node_modules&lt;/code&gt; - by running &lt;code&gt;npm install&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;Tracking generated files leads to unnecessary noise and bloat in your git history.
+Worse, since some dependencies are native and must be compiled,
+checking them in makes your app less portable because you&amp;#39;ll be
+providing builds from just a single, and possibly incorrect, environment.&lt;/p&gt;
+
+&lt;p&gt;For the same reason, you shouldn&amp;#39;t check in &lt;code&gt;bower_components&lt;/code&gt; or the
+compiled assets from grunt builds.&lt;/p&gt;
+
+&lt;p&gt;If you&amp;#39;ve accidentally checked in &lt;code&gt;node_modules&lt;/code&gt; before, that&amp;#39;s okay.
+You can remove it like this:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="term"&gt;$ echo &amp;#39;node_modules&amp;#39; &amp;gt;&amp;gt; .gitignore
+$ git rm -r --cached node_modules
+$ git commit -am &amp;#39;ignore node_modules&amp;#39;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;I also ignore npm&amp;#39;s logs so they don&amp;#39;t clutter my code:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="term"&gt;$ echo &amp;#39;npm-debug.log&amp;#39; &amp;gt;&amp;gt; .gitignore
+$ git commit -am &amp;#39;ignore npm-debug&amp;#39;
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;By ignoring these unnecessary files, your repositories will be smaller,
+your commits will be simpler, and you&amp;#39;ll avoid merge conflicts in
+the generated directories.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='10-simplify' href='#10-simplify'&gt;10. Simplify&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Tech predictions are famously inaccurate, but I&amp;#39;ll make one here for the upcoming year.
+I predict that 2016 will be the year of &lt;em&gt;simplification&lt;/em&gt; in JavaScript.&lt;/p&gt;
+
+&lt;p&gt;A growing group of developers are simplifying their architectures already.
+Instead of monolithic MVCs with big frameworks, they&amp;#39;re
+&lt;a href="https://medium.com/swlh/scaling-on-the-cheap-933e46944886#.2lvubkyhm"&gt;building apps with static frontends&lt;/a&gt;,
+which can be served over CDN,
+with a Node.js API for dynamic data.&lt;/p&gt;
+
+&lt;p&gt;We&amp;#39;re also beginning to see the drag that complex build systems put on our projects.
+The leading edge of developers are simplifying their builds -
+for instance, by using a &amp;#39;vanilla&amp;#39; build
+&lt;a href="https://medium.com/@tarkus/you-might-not-need-gulp-js-89a0220487dd#.etiox78kw"&gt;without bower, gulp, or grunt&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Finally, we&amp;#39;ll simplify our code in 2016.
+Sometimes, this will come from removing features, as with
+&lt;a href="https://www.youtube.com/watch?v=bo36MrBfTk4"&gt;Douglas Crockford&amp;#39;s &amp;quot;The Better Parts.&amp;quot;&lt;/a&gt;
+Other times, this will come from adding features - like my favorite callback replacement,
+&lt;a href="https://thomashunter.name/blog/the-long-road-to-asyncawait-in-javascript/"&gt;async-await&lt;/a&gt;.
+Async-await isn&amp;#39;t yet available in Node,
+but you can use it today via the awesome
+&lt;a href="http://babeljs.io/docs/usage/cli/#babel-node"&gt;BabelJS&lt;/a&gt; project.&lt;/p&gt;
+
+&lt;p&gt;Instead of seeing how many tools and frameworks you can cram in at once,
+try to simplify your work!&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='what-are-your-habits' href='#what-are-your-habits'&gt;What are your habits?&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;I try to follow these habits in all of my projects.
+Whether you&amp;#39;re &lt;a href="https://devcenter.heroku.com/articles/getting-started-with-nodejs#introduction"&gt;new to node&lt;/a&gt;
+or a server-side JS veteran, I&amp;#39;m sure you&amp;#39;ve developed tricks of your own.
+We&amp;#39;d love to hear them!
+Share your habits by tweeting with the
+&lt;a href="https://twitter.com/search?f=tweets&amp;amp;vertical=default&amp;amp;q=%23node_habits&amp;amp;src=typd"&gt;#node_habits&lt;/a&gt; hashtag.&lt;/p&gt;
+
+&lt;p&gt;Happy hacking!&lt;/p&gt;
+</description>
+      <author>Hunter Loftis</author>
+    </item>
+    <item>
+      <title>Announcing Heroku + Parse: Flexible Platform Meets Feature-Rich SDKs</title>
+      <link>https://blog.heroku.com/archives/2015/10/22/heroku-plus-parse</link>
+      <pubDate>Thu, 22 Oct 2015 17:00:20 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2015/10/22/heroku-plus-parse</guid>
+      <description>&lt;p&gt;Most modern mobile apps depend heavily on the app’s back-end.  That’s because many of the expectations users have for mobile apps today -- for the application to work regardless of network connectivity, to notify them when relevant content changes, to have integrations with the social networks they use, for appropriate levels of security, and a hundred other things -- are reliant on the app’s back-end services.&lt;/p&gt;
+
+&lt;p&gt;The most common pattern for mobile back-ends we see today is for developers to design, build and maintain their back-end architectures on Heroku. This approach is as flexible as it is powerful, but it requires significant engineering effort.  A faster alternative would be to use a service like Parse.  Using the Parse SDKs gets you some great services right out of the box. However, if you need to add customized functionality to your application at scale, there just isn&amp;#39;t a simple way to do it.&lt;/p&gt;
+&lt;p&gt;We’re pleased to announce the first results of a partnership between Heroku and Parse aimed at delivering the best of both worlds.  Today we’re making available an integration between Heroku and Parse’s Cloud Code product. This combination gives you the flexibility and customization of the Heroku platform and the convenience of Parse’s cross-platform mobile SDKs.  This is just the beginning, and as we continue to work together on extending and improving the integration, we welcome your &lt;a href="mailto:parse-feedback@heroku.com"&gt;feedback&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Watch this screencast for a 3-minute overview of how this works, and then read on to see how you can begin using Heroku and Parse together today.&lt;/p&gt;
+
+&lt;iframe src="https://player.vimeo.com/video/143172396?color=5e52ab&amp;title=0&amp;byline=0&amp;portrait=0" width="605" height="339" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen&gt;&lt;/iframe&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='how-this-works' href='#how-this-works'&gt;How this works&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;To begin taking advantage of the integration, you&amp;#39;ll need a &lt;a href="https://parse.com/signup"&gt;Parse&lt;/a&gt; account, a &lt;a href="https://signup.heroku.com/"&gt;Heroku&lt;/a&gt; account and the respective CLI tools.&lt;/p&gt;
+
+&lt;p&gt;Let&amp;#39;s start by using the &lt;a href="https://www.parse.com/docs/cloudcode/guide#command-line-heroku"&gt;Parse command line tool&lt;/a&gt; to provision a new Parse app. &lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;$ parse new&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;We&amp;#39;ll be prompted to choose an existing Parse app, or to create a new one and name it. Let&amp;#39;s create a new one:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Would you like to create a new app, or add Cloud Code to an existing app?
+Type &amp;quot;(n)ew&amp;quot; or &amp;quot;(e)xisting&amp;quot;: n
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Next, we select Heroku as our provider:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;Which of these providers would you like use for running your server code:
+  1) Heroku (https://www.heroku.com)
+  2) Parse  (https://parse.com/docs/cloudcode/guide)
+       Type 1 or 2 to make a selection: 1
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;&lt;em&gt;Note: If your Heroku account isn&amp;#39;t linked to your Parse account, it&amp;#39;s at this point that you&amp;#39;ll be directed to the appropriate settings page.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;The Parse CLI will finish by generating the Node Express scaffolding. Now we can &lt;code&gt;cd&lt;/code&gt; into our new project directory, and deploy it to Heroku:&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;$ cd Parsoku/&lt;/code&gt;&lt;br/&gt;
+&lt;code&gt;$ parse deploy&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;That&amp;#39;s it; you have the full power of Heroku’s developer experience, combined with the convenience of Parse’s cross-platform mobile SDKs at your disposal.  &lt;/p&gt;
+&lt;h3 class='anchored'&gt;
+  &lt;a name='taking-it-up-a-level' href='#taking-it-up-a-level'&gt;Taking it up a level&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;p&gt;We&amp;#39;ve provisioned new Parse and Heroku apps, generated an Express server, and deployed it to Heroku. Not a bad start, but we&amp;#39;re not finished yet. The &lt;a href="https://elements.heroku.com/"&gt;Heroku add-ons ecosystem&lt;/a&gt; includes a wide selection of services that we can use to add functionality to our Express server. Let&amp;#39;s use the &lt;a href="https://elements.heroku.com/addons/sendgrid"&gt;SendGrid add-on&lt;/a&gt; to welcome new users. &lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;Note: Parse does not add a &lt;code&gt;User&lt;/code&gt; class by default. Add the User class via the Parse dashboard before continuing.&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;First we&amp;#39;ll provision the add-on:&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;$ heroku addons:create sendgrid -a parsoku-app-name&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;Which made our SendGrid credentials available to our app via config vars, you can inspect those using the &lt;a href="https://toolbelt.heroku.com/"&gt;Heroku toolbelt&lt;/a&gt;:&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;$ heroku config -a parsoku-app-name&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;We&amp;#39;ll also need to install the &lt;a href="https://www.npmjs.com/package/sendgrid"&gt;SendGrid library&lt;/a&gt;:&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;$ npm install sendgrid --save&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;With our SendGrid add-on ready to go, we can use the config var added through the provisioning process in tandem with the library we installed to send a welcome message each time a user signs up.&lt;/p&gt;
+
+&lt;p&gt;It&amp;#39;s time to customize the Express server:&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;/cloud/main.js&lt;/code&gt;&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class="js"&gt;var Parse = require(&amp;#39;parse-cloud-express&amp;#39;).Parse;
+var sendgrid = require(&amp;#39;sendgrid&amp;#39;)(process.env.SENDGRID_USERNAME, process.env.SENDGRID_PASSWORD)
+
+function sendWelcome(email) {
+  var opts = {
+    to: email,
+    from: &amp;#39;creager@heroku.com&amp;#39;,
+    subject: &amp;#39;Welcome to webscale mobile apps&amp;#39;,
+    text: &amp;#39;Welcome, and thanks for signing up!&amp;#39;
+  }
+
+  sendgrid.send(opts, function(err) {
+    if (err) {
+      console.error(&amp;#39;unable to send via sendgrid: &amp;#39;, err.message);
+      return;
+    }
+
+    console.info(&amp;#39;sent to sendgrid for delivery&amp;#39;)
+  })
+}
+
+Parse.Cloud.afterSave(&amp;#39;_User&amp;#39;, function(request, response) {
+  if (request.body.object.email) {
+    sendWelcome(request.body.object.email);
+  }
+
+  response.success();
+});
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Now we add and commit the changes we&amp;#39;ve made via git:&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;$ git add cloud/main.js package.json&lt;/code&gt;&lt;br/&gt;
+&lt;code&gt;$ git commit -m &amp;quot;Welcome new users&amp;quot;&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;Finally, we&amp;#39;re ready to deploy the latest version of our Express server:&lt;/p&gt;
+
+&lt;p&gt;&lt;code&gt;$ parse deploy&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;You can test that it&amp;#39;s working by visiting the Parse dashboard and manually adding a user. Use either the Heroku toolbelt or Parse command line tool to peek under the hood: &lt;code&gt;$ parse logs -f&lt;/code&gt;&lt;/p&gt;
+
+&lt;p&gt;We can&amp;#39;t wait to see what you build with this integration, as always we welcome your &lt;a href="mailto:parse-feedback@heroku.com"&gt;feedback&lt;/a&gt;, issues and of course PRs. Both the &lt;a href="https://github.com/ParsePlatform/parse-cli"&gt;Parse CLI&lt;/a&gt; and &lt;a href="https://github.com/ParsePlatform/CloudCode-Express"&gt;Express scaffolding&lt;/a&gt; are open source, and available on GitHub.&lt;/p&gt;
+</description>
+      <author>Matthew Creager</author>
+    </item>
+    <item>
+      <title>Introducing Heroku Private Spaces: Private PaaS, delivered as-a-Service</title>
+      <link>https://blog.heroku.com/archives/2015/9/10/heroku_private_spaces_private_paas_delivered_as_a_service</link>
+      <pubDate>Thu, 10 Sep 2015 12:05:36 GMT</pubDate>
+      <guid>https://blog.heroku.com/archives/2015/9/10/heroku_private_spaces_private_paas_delivered_as_a_service</guid>
+      <description>&lt;p&gt;As the world becomes more cloud-centric, and more of our apps and business depend on its capabilities, the trust, control and management of cloud services is more important than ever.  Since the first days of Heroku  — and Platform-as-a-Service in general  — many companies have struggled to balance the impact and success of the cloud with the control offered by traditional software and on-premise infrastructure.  Too often that balance tips back towards software, with companies choosing to meet those requirements by building and running their own platforms, inevitably becoming frustrated by the resulting complexity, cost and poor experience.&lt;/p&gt;
+
+&lt;p&gt;Today Heroku is introducing Private Spaces, a new Heroku runtime that delivers the best of both worlds; the simplicity and success of the cloud, combined with the network and trust controls historically only available with on premise, behind the firewall deployments.  Available today in public beta, Private Spaces is powered by Heroku Dogwood  — an all-new runtime architecture that augments the current Cedar runtime. Spaces are being released as part of &lt;a href="https://www.salesforce.com/blog/2015/09/salesforce-app-cloud.html"&gt;Salesforce’s new App Cloud&lt;/a&gt;, also launching today.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='heroku-private-spaces' href='#heroku-private-spaces'&gt;Heroku Private Spaces&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;A Heroku Private Space contains all of the familiar elements of a Heroku app, including dynos and data services.  These elements are deployed and run in network isolated environments, separating the “private” application, including its associated data, from the “public” systems that keep it up, running and healthy.  &lt;/p&gt;
+
+&lt;p&gt;The new mix of multi-tenant control plane with private runtimes is what makes this architecture unique, and allows it to share an identical development and deployment experience with the Heroku you know today. You develop and deploy apps in Private Spaces just like you would normally on Heroku; Heroku Button, git push deployments, review apps, pipelines, seamless scaling, self healing and Elements Ecosystem  — are all included in Private Spaces.&lt;/p&gt;
+
+&lt;p&gt;Even better, this isolation architecture also allows for more geographic control; Spaces can be deployed in Frankfurt, Germany, Tokyo, Japan, or in the United States in either Virginia or Oregon, with more regions to be added in the future.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='using-private-spaces' href='#using-private-spaces'&gt;Using Private Spaces&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Creating a Private Space is as simple as executing a single command&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ heroku spaces:create acme-prod
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Once provisioned, the Heroku experience is the same as you use today, with the addition of a new space flag:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ heroku create myapp --space acme-prod
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;You can also create and manage spaces from the dashboard:&lt;/p&gt;
+
+&lt;iframe src="https://player.vimeo.com/video/137899839" width="640" height="360" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen&gt;&lt;/iframe&gt;
+
+&lt;p&gt;Once created, the space becomes a deployment target for your apps, much like Cedar is implicitly today.  You can create multiple apps within a space, each with its own set of dynos and add-ons; since they share a space those apps will share a network boundary and associated network controls.  And those apps and spaces can sit alongside your Cedar apps; it is expected that developers will use both Private Spaces and traditional Heroku depending on the requirements and development stage of a given app.&lt;/p&gt;
+
+&lt;p&gt;Most importantly, there are no additional configuration or operational requirements to use your space; it runs and scales just like the rest of Heroku.  Under the hood, the components that comprise a space are run and managed automatically - despite the fact that spaces are private, there is no additional operational burden for developers using them.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='global-regions' href='#global-regions'&gt;Global Regions&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Since Private Spaces are discrete, self contained Heroku runtimes, they can be deployed with new kinds of flexibility - including new geographic options.  As part of provisioning a space, you can specify one of the newly supported regions.  &lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ heroku spaces:create acme-jp --region tokyo
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;From there, the rest of the experience is transparent, and any operation associated with that space - including creating new apps, scaling dynos or even adding Postgres or Redis data stores, will automatically happen in that region.  Note that Heroku&amp;#39;s core services, such as git repos, app builds and the control API service, are located in the Virginia region and will not be local to spaces running elsewhere.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1441847905-dw_regions%402x.png" alt="dw_regions@2x"&gt;&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='secure-enterprise-service-connectivity' href='#secure-enterprise-service-connectivity'&gt;Secure Enterprise Service Connectivity&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Applications in a Private Space reside in an isolated virtual network with access controlled at the network level. Space administrators can choose from which other networks applications can be accessed and thanks to a built-in NAT gateway, apps in a Private Space can be granted access to restricted services in other networks using IP whitelisting. &lt;/p&gt;
+
+&lt;p&gt;This makes it easy to create a secure production environment for Salesforce applications where Heroku dynos and databases can process and store customer data within a secure, locked-down network boundary. Similarly, Heroku apps can now be securely integrated with on-premise services protected by network access controls allowing developers to move more workloads to the cloud.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src="https://heroku-blog-files.s3.amazonaws.com/1441844826-dw_outboundIP%402x.png" alt="dw_outboundIP@2x"&gt;&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='private-data-services' href='#private-data-services'&gt;Private Data Services&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Few applications consist of just running code. One of the most critical parts of an application from a security and governance perspective is the database. The ease with which data services can be added and managed on Heroku has always been critical to rapid delivery and the overall experience.&lt;/p&gt;
+
+&lt;p&gt;Data services in Private Spaces are exactly as easy to create and manage as they have always been. Simply add the add-on as usual:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ heroku addons:create heroku-postgresql:standard-4
+Creating postgresql-triangular-2817... done
+Adding postgresql-triangular-2817 to myapp... done
+Setting DATABASE_URL and restarting myapp... done, v3
+This database will be created in a private space.
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Heroku automatically detects that the app is in a Private Space and sets up a new database within the Private Space. You can verify this by looking at the &lt;code&gt;DATABASE_URL&lt;/code&gt;:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;$ heroku config:get DATABASE_URL
+postgres://udv...:pd0...@10.1.32.86:5432/db36mo7ajub9dg
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;The database host has an IP address in the non-publicly-routable &lt;code&gt;10.0.0.0/8&lt;/code&gt; address space and cannot be accessed directly from the Internet. The same is the case for Heroku Redis. The data services can only be accessed from dynos in the same Private Space and via a bastion host by users with explicitly granted access and valid Heroku credentials.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='dyno-networking' href='#dyno-networking'&gt;Dyno Networking&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Dynos running in a Private Space are connected to a single private dyno network allowing dynos to communicate with each other using any TCP or UDP port and protocol. This lets you do new and interesting things with your Heroku apps. For example, web dynos can communicate with each other and share session state over a gossip protocol. Web and worker dynos can communicate with each other without going over the public Internet. Dynos from different applications can even talk to each other as long as they are in the same Private Space. This can be useful for deploying diagnostics applications that consume diagnostics streams from other application dynos over the private network.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='space-access-controls' href='#space-access-controls'&gt;Space Access Controls&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;Being part of &lt;a href="https://www.salesforce.com/blog/2015/09/heroku-enterprise.html"&gt;Heroku Enterprise&lt;/a&gt;, Private Spaces take full advantage of fine-grained access controls. Access control can be delegated to apps inside Private Spaces allowing organizations to manage large application portfolios without unnecessary bureaucracy. &lt;/p&gt;
+
+&lt;p&gt;The new network controls allow for elegant separation of responsibilities where Space administrators control network access while developers retain maximum self-service deployment without compromising security.&lt;/p&gt;
+&lt;h2 class='anchored'&gt;
+  &lt;a name='learn-more' href='#learn-more'&gt;Learn More&lt;/a&gt;
+&lt;/h2&gt;
+
+&lt;p&gt;You can learn more about Private Spaces by attending our &lt;a href="https://www.heroku.com/form/enterprise-beta-programs"&gt;technical deep dive&lt;/a&gt; on October 8th, where we’ll walk through a live demo and go deeper into different use cases. If you’re attending Dreamforce, you definitely want to attend the Private Spaces session on &lt;a href="https://success.salesforce.com/apex/Ev_Sessions?eventId=a1Q30000000DHQlEAO#/session/a2q30000001E9uHAAS"&gt;Thursday at 12pm&lt;/a&gt; or stop by the Heroku area in the Dev Zone anytime to get a live demo. You can also hear from a current participant of the Heroku Private Spaces limited beta on &lt;a href="https://success.salesforce.com/apex/Ev_Sessions?eventId=a1Q30000000DHQlEAO#/session/a2q30000001Ba3vAAC"&gt;Friday at 10am&lt;/a&gt; with Align Technology, who’ll be sharing their experiences using Private Spaces for multi-region and network-isolated applications. Heroku Private Spaces is in limited beta today; you can &lt;a href="https://www.heroku.com/form/enterprise-beta-programs"&gt;get on the list&lt;/a&gt; to participate in the betas today.&lt;/p&gt;
+</description>
+      <author>Jesper Joergensen</author>
+    </item>
+  </channel>
+</rss>
+Q-	i�      V� �V� �<4RR       )a,:https://blog.heroku.com/rss_feedburner security-info FnhllAKWRHGAlo+ESXykKAAAAAAAAAAAwAAAAAAAAEaphjojH6pBabDSgSnsfLHeAAQAAgAAAAAAAAAAAAAAAAAAAAAB4vFIJp5wRkeyPxAQ9RJGKPqbqVvKO0mKuIl8ec8o/uhmCjImkVxP+7sgiYWmMt8F+O2DZM7ZTG6GukivU8OT5gAAAAEAAAlBMIIJPTCCCCWgAwIBAgIQCkD9c9lXzXc8HSepY25JlDANBgkqhkiG9w0BAQsFADB1MQswCQYDVQQGEwJVUzEVMBMGA1UEChMMRGlnaUNlcnQgSW5jMRkwFwYDVQQLExB3d3cuZGlnaWNlcnQuY29tMTQwMgYDVQQDEytEaWdpQ2VydCBTSEEyIEV4dGVuZGVkIFZhbGlkYXRpb24gU2VydmVyIENBMB4XDTE1MTAwMjAwMDAwMFoXDTE3MTAxODEyMDAwMFowgfQxHTAbBgNVBA8MFFByaXZhdGUgT3JnYW5pemF0aW9uMRMwEQYLKwYBBAGCNzwCAQMTAlVTMRkwFwYLKwYBBAGCNzwCAQITCERlbGF3YXJlMRAwDgYDVQQFEwc0NDI2NDQ5MRcwFQYDVQQJEw42NTAgN3RoIFN0cmVldDEOMAwGA1UEERMFOTQxMDMxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1TYW4gRnJhbmNpc2NvMRUwEwYDVQQKEwxIZXJva3UsIEluYy4xFzAVBgNVBAMTDnd3dy5oZXJva3UuY29tMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArt1ke7K5cdGvDe6l/mw+Hnx7yLdEhZbsEopWJ7p113s3fPOwwCjpuBh4Fq3Ih7JBVY/2O05mXGV/vICqvmElPgEA3pefjFlCyDPG9jp1nomisdU0YB4oZ5Byo3e7mW9PjYN3xw9jlNWwZVXE82zZWOhidwXGFaiL3hH3cODPLwcP3SJeBTaFxywdtClod34aKT9aqzuitqTbETyopGgk3IOJFrw43fee/GUoAR3MZVNmSFcVegBerqkXgdiItqj6Kboo+DClLDpPSounhe6iHXk6h5brYUd13bvj+2t2ypw+yHAtqYD6tWqYUlvNch3VjFAyRSNbpTu7EZew2pVDLQIDAQABo4IFRzCCBUMwHwYDVR0jBBgwFoAUPdNQpdagre7zSmAKZdMh1Pj41g8wHQYDVR0OBBYEFNCVeNMmma6pMVpcfAW1koGdffi9MIIB8gYDVR0RBIIB6TCCAeWCDnd3dy5oZXJva3UuY29tghFhZGRvbnMuaGVyb2t1LmNvbYIVYWRkb25zLXNzby5oZXJva3UuY29tgg9iZXRhLmhlcm9rdS5jb22CD2Jsb2cuaGVyb2t1LmNvbYIUYnVpbGRraXRzLmhlcm9rdS5jb22CFGRhc2hib2FyZC5oZXJva3UuY29tghRkYXRhY2xpcHMuaGVyb2t1LmNvbYIUZGV2Y2VudGVyLmhlcm9rdS5jb22CFWRpc2N1c3Npb24uaGVyb2t1LmNvbYIPaGVscC5oZXJva3UuY29tgg1pZC5oZXJva3UuY29tgg9qb2JzLmhlcm9rdS5jb22CEGthc2hpLmhlcm9rdS5jb22CD25ld3MuaGVyb2t1LmNvbYIOb2tpLmhlcm9rdS5jb22CE3BhcnRuZXJzLmhlcm9rdS5jb22CE3BheW1lbnRzLmhlcm9rdS5jb22CE3Bvc3RncmVzLmhlcm9rdS5jb22CEXJlZGVlbS5oZXJva3UuY29tghJzdWNjZXNzLmhlcm9rdS5jb22CFnN1cHBvcnQtc3NvLmhlcm9rdS5jb22CE3Rvb2xiZWx0Lmhlcm9rdS5jb22CEHZhdWx0Lmhlcm9rdS5jb22CD3dhemEuaGVyb2t1LmNvbTAOBgNVHQ8BAf8EBAMCBaAwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMCMHUGA1UdHwRuMGwwNKAyoDCGLmh0dHA6Ly9jcmwzLmRpZ2ljZXJ0LmNvbS9zaGEyLWV2LXNlcnZlci1nMS5jcmwwNKAyoDCGLmh0dHA6Ly9jcmw0LmRpZ2ljZXJ0LmNvbS9zaGEyLWV2LXNlcnZlci1nMS5jcmwwSwYDVR0gBEQwQjA3BglghkgBhv1sAgEwKjAoBggrBgEFBQcCARYcaHR0cHM6Ly93d3cuZGlnaWNlcnQuY29tL0NQUzAHBgVngQwBATCBiAYIKwYBBQUHAQEEfDB6MCQGCCsGAQUFBzABhhhodHRwOi8vb2NzcC5kaWdpY2VydC5jb20wUgYIKwYBBQUHMAKGRmh0dHA6Ly9jYWNlcnRzLmRpZ2ljZXJ0LmNvbS9EaWdpQ2VydFNIQTJFeHRlbmRlZFZhbGlkYXRpb25TZXJ2ZXJDQS5jcnQwDAYDVR0TAQH/BAIwADCCAX0GCisGAQQB1nkCBAIEggFtBIIBaQFnAHcApLkJkLQYWBSHuxOizGdwCjw1mAT5G9+443fNDsgN3BAAAAFQOOnffAAABAMASDBGAiEA2zwnW2pFEk8dYAnct8flKmcEMRJm/CxEmgjYoCfDrDQCIQD2wUT2kN7DhS7qlPd9UvSOrImkSNOl4hF3ZaHTT3ZKZgB1AGj2mPgfZIK+OozuuSgdTPxxUV1nk9RE0QpnrLtPT/vEAAABUDjp318AAAQDAEYwRAIgdERP1vISBYES8Pm8NSz3pJyLa9uCLBMRU4lbAbAG1SwCICMQ9oWCtLnkupci7tGv4DI6HMiQ6FMh+0x6ttbieKoZAHUAVhQGmi/XwuzT9eG9RLI+x0Z2ubyZEVzA75SYVdaJ0N0AAAFQOOngeAAABAMARjBEAiAE/BRZBeFpam/+bsJtg+fEozsQPvJv/6dpKyipWcprwwIgLCMkeDtpCCEwDm+f4ygxyr/blRTOVX6G0MEWH0XuhMYwDQYJKoZIhvcNAQELBQADggEBAAb+WeGRLc5R5O8V+HBWUih51XHEd0zOrjV5cZITjxX5a+zb0NMWQWt7U01qtLMorR6hWdHMroz/aeqNsfGF5CJkfCQRj3lSeROfgnxcskEwwXMpGM3f/LSHTtDN9/aNVqOV2Eu4B3hVEWRrvH7l8wp8ProfopV/aCxq4ByHLyAqk+Dc6CnN/77JP/P4++/rSaP6MZBMZ3L8fE3T5Giaajq2CvltugAIOoqoRQ6TGBZ3fY18+QLonArGzHppOwqrTr4OdSBQoZyvmC6ibofg84FlnIQawz4Gn1xpoHuFm12OGVBKNQRK9geImK6aTgi4ZmEi+Z6B110t9pOE/H7vrivALwADAAAAAQEBAAA= request-method GET response-head HTTP/1.1 200 OK
+Server: Cowboy
+Date: Sat, 05 Mar 2016 15:53:24 GMT
+X-Frame-Options: SAMEORIGIN
+X-XSS-Protection: 1; mode=block
+x-content-type-options: nosniff
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: POST, PUT, DELETE, GET, OPTIONS
+Access-Control-Request-Method: *
+Access-Control-Allow-Headers: Origin, X-Requested-With, Content-Type, Accept, Authorization
+Content-Type: application/xml; charset=utf-8
+Etag: W/"9e52a048c894acabf8fd2f27c0a794f0"
+Cache-Control: max-age=0, private, must-revalidate
+X-Request-Id: bb44ce99-d573-4642-8c94-bba270dbda5c
+X-Runtime: 0.074692
+Strict-Transport-Security: max-age=31536000
+Via: 1.1 vegur
+  �F

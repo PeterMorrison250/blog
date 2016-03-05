@@ -1,0 +1,31 @@
+[General]
+screenCount=1
+
+[LegacySession: saved at previous logout]
+clientMachine1=localhost
+command1=firefox
+count=1
+
+[Session: saved at previous logout]
+clientId1=10fbb25a86000145718436100000014760000
+clientId2=10fbb25a86000145718436900000014760010
+clientId3=10fbb25a86000145718436900000014760011
+count=3
+discardCommand1[$e]=rm,$HOME/.kde/share/config/session/kwin_10fbb25a86000145718436100000014760000_1457186441_83395
+discardCommand2[$e]=rm,$HOME/.kde/share/config/session/kmix_10fbb25a86000145718436900000014760010_1457186441_79229
+discardCommand3[$e]=
+program1=kwin
+program2=/usr/bin/kmix
+program3=pulseaudio
+restartCommand1=kwin,-session,10fbb25a86000145718436100000014760000_1457186441_83395
+restartCommand2=/usr/bin/kmix,-session,10fbb25a86000145718436900000014760010_1457186441_79229
+restartCommand3=
+restartStyleHint1=0
+restartStyleHint2=0
+restartStyleHint3=0
+userId1=vp
+userId2=vp
+userId3=vp
+wasWm1=true
+wasWm2=false
+wasWm3=false

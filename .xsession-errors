@@ -1,0 +1,4 @@
+Script for none started at run_im.
+Script for auto started at run_im.
+Script for default started at run_im.
+init: gpg-agent post-stop process (1320) killed by TERM signal
